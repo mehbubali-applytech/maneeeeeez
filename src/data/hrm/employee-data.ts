@@ -1,0 +1,158 @@
+import avatarImg1 from "../../../public/assets/images/avatar/avatar16.png";
+import avatarImg2 from "../../../public/assets/images/avatar/avatar2.png";
+import avatarImg3 from "../../../public/assets/images/avatar/avatar4.png";
+import avatarImg4 from "../../../public/assets/images/avatar/avatar10.png";
+import avatarImg5 from "../../../public/assets/images/avatar/avatar13.png";
+import avatarImg6 from "../../../public/assets/images/avatar/avatar15.png";
+import avatarImg7 from "../../../public/assets/images/avatar/avatar.png";
+import avatarImg8 from "../../../public/assets/images/avatar/avatar12.png";
+import { IEmployee } from "@/interface";
+
+const employeeData: IEmployee[] = [
+  {
+    info: {},
+    id: 1,
+    employeeId: "EMP001",
+    employee_id: 1,
+    image: avatarImg1,
+    name: "Naira Muskan",
+    designation: "Chief Executive Officer",
+    phone: "+15551234567",
+    created_at: "2023-01-01",
+    socialLinks: {
+      facebook: "https://www.facebook.com",
+      twitter: "https://x.com",
+      linkedin: "https://www.linkedin.com",
+      youtube: "https://www.youtube.com/channel",
+      website: "#",
+    },
+  },
+  {
+    info: {},
+    id: 2,
+    employeeId: "EMP002",
+    employee_id: 2,
+    image: avatarImg2,
+    name: "Emily Johnson",
+    designation: "Chief Innovation Officer",
+    phone: "+15551234567",
+    created_at: "2023-02-01",
+    socialLinks: {
+      facebook: "https://www.facebook.com",
+      twitter: "https://x.com",
+      linkedin: "https://www.linkedin.com",
+      youtube: "https://www.youtube.com/channel",
+      website: "#",
+    },
+  },
+  {
+    info: {},
+    id: 3,
+    employeeId: "EMP003",
+    employee_id: 3,
+    image: avatarImg3,
+    name: "Jessica Miller",
+    designation: "Product Manager",
+    phone: "+15551234567",
+    created_at: "2023-03-01",
+    socialLinks: {
+      facebook: "https://www.facebook.com",
+      twitter: "https://x.com",
+      linkedin: "https://www.linkedin.com",
+      youtube: "https://www.youtube.com/channel",
+      website: "#",
+    },
+  },
+  {
+    info: {},
+    id: 4,
+    employeeId: "EMP004",
+    employee_id: 4,
+    image: avatarImg4,
+    name: "Jennifer Brown",
+    designation: "Engineering Project Manager",
+    phone: "+15551234567",
+    created_at: "2023-04-01",
+    socialLinks: {
+      facebook: "https://www.facebook.com",
+      twitter: "https://x.com",
+      linkedin: "https://www.linkedin.com",
+      youtube: "https://www.youtube.com/channel",
+      website: "#",
+    },
+  },
+  {
+    info: {},
+    id: 5,
+    employeeId: "EMP005",
+    employee_id: 5,
+    image: avatarImg5,
+    name: "Sarah Martinez",
+    designation: "Software Developer",
+    phone: "+15551234567",
+    created_at: "2023-05-01",
+    socialLinks: {
+      facebook: "https://www.facebook.com",
+      twitter: "https://x.com",
+      linkedin: "https://www.linkedin.com",
+      youtube: "https://www.youtube.com/channel",
+      website: "#",
+    },
+  },
+  {
+    info: {},
+    id: 6,
+    employeeId: "EMP006",
+    employee_id: 6,
+    image: avatarImg6,
+    name: "Amanda Taylor",
+    designation: "Technical Lead",
+    phone: "+15551234567",
+    created_at: "2023-06-01",
+    socialLinks: {
+      facebook: "https://www.facebook.com",
+      twitter: "https://x.com",
+      linkedin: "https://www.linkedin.com",
+      youtube: "https://www.youtube.com/channel",
+      website: "#",
+    },
+  },
+  {
+    info: {},
+    id: 7,
+    employeeId: "EMP007",
+    employee_id: 7,
+    image: avatarImg7,
+    name: "Christopher Wilson",
+    designation: "Chief Architect",
+    phone: "+15551234567",
+    created_at: "2023-07-01",
+    socialLinks: {
+      facebook: "https://www.facebook.com",
+      twitter: "https://x.com",
+      linkedin: "https://www.linkedin.com",
+      youtube: "https://www.youtube.com/channel",
+      website: "#",
+    },
+  },
+  {
+    info: {},
+    id: 8,
+    employeeId: "EMP008",
+    employee_id: 8,
+    image: avatarImg8,
+    name: "Matthew Clark",
+    designation: "Chief Digital Officer",
+    phone: "+15551234567",
+    created_at: "2023-08-01",
+    socialLinks: {
+      facebook: "https://www.facebook.com",
+      twitter: "https://x.com",
+      linkedin: "https://www.linkedin.com",
+      youtube: "https://www.youtube.com/channel",
+      website: "#",
+    },
+  },
+];
+
+export default employeeData;
