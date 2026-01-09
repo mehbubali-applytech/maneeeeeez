@@ -86,6 +86,12 @@ const businessOwnerSidebarData: SidebarCategory[] = [
         label: "Holidays",
         icon: "fa-light fa-calendar-alt",
         link: "/owner/holidays"
+      },
+       {
+        id: 35,
+        label: "Offer Letters",
+        icon: "fa-light fa-calendar-alt",
+        link: "/owner/offer-letter"
       }
     ]
   },

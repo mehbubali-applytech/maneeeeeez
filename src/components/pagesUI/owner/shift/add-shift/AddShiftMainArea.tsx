@@ -237,6 +237,9 @@ const AddShift: React.FC = () => {
             <li className="breadcrumb-item">
               <Link href="/owner">Owner</Link>
             </li>
+             <li className="breadcrumb-item">
+              <Link href="/owner/shift">Shifts</Link>
+            </li>
             <li className="breadcrumb-item active">
               Add New Shift
             </li>

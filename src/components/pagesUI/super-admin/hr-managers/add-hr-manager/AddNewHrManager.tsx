@@ -7,9 +7,10 @@ import { useForm, Controller } from "react-hook-form";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
-import { IHrManagerForm } from "../hr-managers.interface";
+import { IHrManagerForm, IHrManager } from "../hr-managers.interface";
 import InputField from "@/components/elements/SharedInputs/InputField";
 
+// Mock data
 const qualificationOptions = [
   "MBA",
   "MS in HR",
@@ -93,14 +94,27 @@ const departments = [
   "International HR"
 ];
 
-const AddNewHrManager: React.FC = () => {
+const genderOptions = ["Male", "Female", "Other"];
+const maritalStatusOptions = ["Single", "Married", "Divorced", "Widowed"];
+const statusOptions = ["Active", "Inactive", "On Leave", "Pending"];
+
+interface AddEditHrManagerMainAreaProps {
+  mode?: "add" | "edit";
+  hrManagerData?: IHrManager | null;
+}
+
+const AddEditHrManagerMainArea: React.FC<AddEditHrManagerMainAreaProps> = ({
+  mode = "add",
+  hrManagerData = null,
+}) => {
   const router = useRouter();
-  const [status, setStatus] = useState<"Active" | "Inactive" | "On Leave" | "Pending">("Active");
   const [activeIndex, setActiveIndex] = useState<number>(0);
-  const [formData, setFormData] = useState<Partial<IHrManagerForm>>({});
+  const [status, setStatus] = useState<"Active" | "Inactive" | "On Leave" | "Pending">("Active");
   const [selectedQualifications, setSelectedQualifications] = useState<string[]>([]);
   const [selectedCertifications, setSelectedCertifications] = useState<string[]>([]);
   const [selectedSpecializations, setSelectedSpecializations] = useState<string[]>([]);
+  const [formData, setFormData] = useState<Partial<IHrManagerForm>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
@@ -110,7 +124,8 @@ const AddNewHrManager: React.FC = () => {
     setValue,
     trigger,
     getValues,
-    formState: { errors },
+    reset,
+    formState: { errors, isDirty },
   } = useForm<IHrManagerForm>({
     defaultValues: {
       rating: 0,
@@ -119,7 +134,7 @@ const AddNewHrManager: React.FC = () => {
       qualifications: [],
       certifications: [],
       specializations: [],
-    }
+    },
   });
 
   const steps = [
@@ -145,6 +160,68 @@ const AddNewHrManager: React.FC = () => {
     },
   ];
 
+  // Load HR manager data in edit mode
+  useEffect(() => {
+    if (mode === "edit" && hrManagerData) {
+      // Transform HR manager data to form data
+      const formValues: Partial<IHrManagerForm> = {
+        hrName: hrManagerData.hrName,
+        hrCode: hrManagerData.hrCode,
+        email: hrManagerData.email,
+        phone: hrManagerData.phone,
+        mobile: hrManagerData.mobile || "",
+        jobTitle: hrManagerData.jobTitle,
+        company: hrManagerData.company,
+        department: hrManagerData.department,
+        location: hrManagerData.location,
+        reportingTo: hrManagerData.reportingTo || "",
+        hireDate: hrManagerData.hireDate,
+        tag: hrManagerData.tag || "",
+        yearsOfExperience: hrManagerData.yearsOfExperience || 0,
+        managedEmployees: hrManagerData.managedEmployees || 0,
+        rating: hrManagerData.rating || 0,
+        dateOfBirth: hrManagerData.dateOfBirth || "",
+        gender: hrManagerData.gender || undefined,
+        maritalStatus: hrManagerData.maritalStatus || undefined,
+        address: hrManagerData.address || "",
+        emergencyContact: hrManagerData.emergencyContact || "",
+        emergencyPhone: hrManagerData.emergencyPhone || "",
+        notes: hrManagerData.notes || "",
+        extension: hrManagerData.extension || "",
+      };
+
+      // Set form values
+      Object.entries(formValues).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          const formKey = key as Extract<keyof IHrManagerForm, string>;
+          setValue(formKey, value as any);
+        }
+      });
+
+      // Set selected arrays
+      if (hrManagerData.qualifications) {
+        setSelectedQualifications(hrManagerData.qualifications);
+        setValue("qualifications", hrManagerData.qualifications);
+      }
+
+      if (hrManagerData.certifications) {
+        setSelectedCertifications(hrManagerData.certifications);
+        setValue("certifications", hrManagerData.certifications);
+      }
+
+      if (hrManagerData.specializations) {
+        setSelectedSpecializations(hrManagerData.specializations);
+        setValue("specializations", hrManagerData.specializations);
+      }
+
+      // Set status
+      setStatus(hrManagerData.status);
+
+      // Load into formData state
+      setFormData(formValues);
+    }
+  }, [mode, hrManagerData, setValue]);
+
   const handleNextStep = async () => {
     const currentStepFields = steps[activeIndex].fields;
     const isValid = await trigger(currentStepFields as any);
@@ -169,50 +246,73 @@ const AddNewHrManager: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    Object.entries(formData).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        const formKey = key as Extract<keyof IHrManagerForm, string>;
-        setValue(formKey, value as any);
+  const onSubmit = async (data: IHrManagerForm) => {
+    setIsSubmitting(true);
+
+    try {
+      const payload: IHrManagerForm = {
+        ...formData,
+        ...data,
+        qualifications: selectedQualifications,
+        certifications: selectedCertifications,
+        specializations: selectedSpecializations,
+        status: status,
+        rating: data.rating || formData.rating || 0,
+      };
+
+      // Add mode-specific data
+      if (mode === "add") {
+        payload.id = Date.now();
+        payload.createdAt = new Date().toISOString();
+        payload.updatedAt = new Date().toISOString();
+      } else if (mode === "edit" && hrManagerData) {
+        payload.id = hrManagerData.id;
+        payload.createdAt = hrManagerData.createdAt;
+        payload.updatedAt = new Date().toISOString();
       }
-    });
-  }, [activeIndex, formData, setValue]);
 
-  const onSubmit = (data: IHrManagerForm) => {
-    const payload = {
-      ...formData,
-      ...data,
-      qualifications: selectedQualifications,
-      certifications: selectedCertifications,
-      specializations: selectedSpecializations,
-      status: status,
-      rating: data.rating || formData.rating || 0,
-      id: Date.now(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      console.log("HR Manager Payload:", payload);
 
-    console.log("HR Manager Payload:", payload);
-    toast.success("HR Manager added successfully!");
-    setTimeout(() => {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      toast.success(mode === "add" ? "HR Manager added successfully!" : "HR Manager updated successfully!");
+
+      setTimeout(() => {
+        router.push("/super-admin/hr-managers");
+      }, 500);
+    } catch (error) {
+      console.error(`Error ${mode === "add" ? "adding" : "updating"} HR manager:`, error);
+      toast.error(mode === "add" ? "Failed to add HR manager" : "Failed to update HR manager");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancel = () => {
+    if (isDirty) {
+      if (confirm("You have unsaved changes. Are you sure you want to leave?")) {
+        router.push("/super-admin/hr-managers");
+      }
+    } else {
       router.push("/super-admin/hr-managers");
-    }, 500);
+    }
   };
 
   const handleQualificationDelete = (qualificationToDelete: string) => {
-    setSelectedQualifications(qualifications => 
+    setSelectedQualifications(qualifications =>
       qualifications.filter(qualification => qualification !== qualificationToDelete)
     );
   };
 
   const handleCertificationDelete = (certificationToDelete: string) => {
-    setSelectedCertifications(certifications => 
+    setSelectedCertifications(certifications =>
       certifications.filter(certification => certification !== certificationToDelete)
     );
   };
 
   const handleSpecializationDelete = (specializationToDelete: string) => {
-    setSelectedSpecializations(specializations => 
+    setSelectedSpecializations(specializations =>
       specializations.filter(specialization => specialization !== specializationToDelete)
     );
   };
@@ -222,6 +322,7 @@ const AddNewHrManager: React.FC = () => {
       case 0:
         return (
           <div className="grid grid-cols-12 gap-6">
+            {/* HR Manager Name */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="hrName"
@@ -234,22 +335,30 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* HR Code */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="hrCode"
                 label="HR Code"
                 required
+                defaultValue={mode === "add" ? "HR-" : watch("hrCode")}
                 register={register("hrCode", {
                   required: "HR Code is required",
                   pattern: {
                     value: /^HR-\d{3,4}$/,
-                    message: "HR Code format: HR-001, HR-1234"
-                  }
+                    message: "HR Code format: HR-001, HR-1234",
+                  },
+                  disabled: mode === "edit",
                 })}
                 error={errors.hrCode}
               />
+
+              {mode === "edit" && (
+                <p className="text-gray-500 text-xs mt-1">HR Code cannot be changed after creation</p>
+              )}
             </div>
 
+            {/* Email */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="email"
@@ -267,6 +376,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Phone */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="phone"
@@ -284,6 +394,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Mobile */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="mobile"
@@ -293,6 +404,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Job Title */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="jobTitle"
@@ -305,6 +417,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Extension */}
             <div className="col-span-12">
               <InputField
                 id="extension"
@@ -318,6 +431,7 @@ const AddNewHrManager: React.FC = () => {
       case 1:
         return (
           <div className="grid grid-cols-12 gap-6">
+            {/* Company */}
             <div className="col-span-12 lg:col-span-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Company <span className="text-red-500">*</span>
@@ -351,6 +465,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Department */}
             <div className="col-span-12 lg:col-span-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Department <span className="text-red-500">*</span>
@@ -384,6 +499,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Location */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="location"
@@ -396,6 +512,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Reporting To */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="reportingTo"
@@ -404,6 +521,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Hire Date */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="hireDate"
@@ -417,6 +535,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Tag */}
             <div className="col-span-12 lg:col-span-6">
               <div className="mb-4">
                 <label htmlFor="tag" className="block text-sm font-medium text-gray-700 mb-1">
@@ -436,6 +555,7 @@ const AddNewHrManager: React.FC = () => {
       case 2:
         return (
           <div className="grid grid-cols-12 gap-6">
+            {/* Years of Experience */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="yearsOfExperience"
@@ -452,6 +572,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Managed Employees */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="managedEmployees"
@@ -465,6 +586,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Rating */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="rating"
@@ -479,6 +601,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Qualifications */}
             <div className="col-span-12">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Qualifications
@@ -503,6 +626,8 @@ const AddNewHrManager: React.FC = () => {
                           {...getTagProps({ index })}
                           onDelete={() => handleQualificationDelete(option)}
                           key={index}
+                          size="small"
+                          className="m-1"
                         />
                       ))
                     }
@@ -520,6 +645,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Certifications */}
             <div className="col-span-12">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Certifications
@@ -544,6 +670,8 @@ const AddNewHrManager: React.FC = () => {
                           {...getTagProps({ index })}
                           onDelete={() => handleCertificationDelete(option)}
                           key={index}
+                          size="small"
+                          className="m-1"
                         />
                       ))
                     }
@@ -561,6 +689,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Specializations */}
             <div className="col-span-12">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Specializations
@@ -581,10 +710,12 @@ const AddNewHrManager: React.FC = () => {
                     renderTags={(value, getTagProps) =>
                       value.map((option, index) => (
                         <Chip
-                        label={option}
-                        {...getTagProps({ index })}
-                        onDelete={() => handleSpecializationDelete(option)}
-                        key={index}
+                          label={option}
+                          {...getTagProps({ index })}
+                          onDelete={() => handleSpecializationDelete(option)}
+                          key={index}
+                          size="small"
+                          className="m-1"
                         />
                       ))
                     }
@@ -607,6 +738,7 @@ const AddNewHrManager: React.FC = () => {
       case 3:
         return (
           <div className="grid grid-cols-12 gap-6">
+            {/* Date of Birth */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="dateOfBirth"
@@ -616,37 +748,67 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Gender */}
             <div className="col-span-12 lg:col-span-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Gender
               </label>
-              <select
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors bg-white"
-                {...register("gender")}
-              >
-                <option value="">Select Gender</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
-              </select>
+              <Controller
+                name="gender"
+                control={control}
+                render={({ field }) => (
+                  <Autocomplete
+                    options={genderOptions}
+                    value={field.value || ""}
+                    onChange={(_, newValue) => {
+                      field.onChange(newValue || "");
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        variant="outlined"
+                        size="small"
+                        placeholder="Select gender"
+                        className="w-full"
+                      />
+                    )}
+                    className="w-full"
+                  />
+                )}
+              />
             </div>
 
+            {/* Marital Status */}
             <div className="col-span-12 lg:col-span-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Marital Status
               </label>
-              <select
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors bg-white"
-                {...register("maritalStatus")}
-              >
-                <option value="">Select Marital Status</option>
-                <option value="Single">Single</option>
-                <option value="Married">Married</option>
-                <option value="Divorced">Divorced</option>
-                <option value="Widowed">Widowed</option>
-              </select>
+              <Controller
+                name="maritalStatus"
+                control={control}
+                render={({ field }) => (
+                  <Autocomplete
+                    options={maritalStatusOptions}
+                    value={field.value || ""}
+                    onChange={(_, newValue) => {
+                      field.onChange(newValue || "");
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        variant="outlined"
+                        size="small"
+                        placeholder="Select marital status"
+                        className="w-full"
+                      />
+                    )}
+                    className="w-full"
+                  />
+                )}
+              />
             </div>
 
+            {/* Address */}
             <div className="col-span-12">
               <div className="mb-4">
                 <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
@@ -661,6 +823,7 @@ const AddNewHrManager: React.FC = () => {
               </div>
             </div>
 
+            {/* Emergency Contact */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="emergencyContact"
@@ -669,6 +832,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Emergency Phone */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="emergencyPhone"
@@ -678,6 +842,7 @@ const AddNewHrManager: React.FC = () => {
               />
             </div>
 
+            {/* Notes */}
             <div className="col-span-12">
               <div className="mb-4">
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
@@ -697,58 +862,64 @@ const AddNewHrManager: React.FC = () => {
       case 4:
         return (
           <div className="space-y-6">
+            {/* Status Selection */}
             <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium text-gray-800">HR Manager Status</h4>
                   <p className="text-gray-600 text-sm mt-1">
-                    {status === "Active"
-                      ? "This HR manager will be active and can manage employees"
-                      : status === "On Leave"
-                        ? "This HR manager will be on leave and temporarily inactive"
-                        : status === "Pending"
-                          ? "This HR manager will be pending review and activation"
-                          : "This HR manager will be inactive and cannot manage employees"}
+                    Set the current status of this HR manager
                   </p>
                 </div>
                 <div className="flex items-center space-x-4">
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as "Active" | "Inactive" | "On Leave" | "Pending")}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="On Leave">On Leave</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+                  <Controller
+                    name="status"
+                    control={control}
+                    render={({ field }) => (
+                      <select
+                        value={status}
+                        onChange={(e) => {
+                          const newStatus = e.target.value as "Active" | "Inactive" | "On Leave" | "Pending";
+                          setStatus(newStatus);
+                          field.onChange(newStatus);
+                        }}
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
+                      >
+                        {statusOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  />
                 </div>
               </div>
 
               <div className={`mt-4 px-4 py-3 rounded-md ${status === "Active"
-                ? "bg-green-50 border border-green-200"
-                : status === "On Leave"
-                  ? "bg-yellow-50 border border-yellow-200"
-                  : status === "Pending"
-                    ? "bg-blue-50 border border-blue-200"
-                    : "bg-gray-100 border border-gray-200"
+                  ? "bg-green-50 border border-green-200"
+                  : status === "On Leave"
+                    ? "bg-yellow-50 border border-yellow-200"
+                    : status === "Pending"
+                      ? "bg-blue-50 border border-blue-200"
+                      : "bg-gray-100 border border-gray-200"
                 }`}>
                 <div className="flex items-center">
                   <div className={`w-3 h-3 rounded-full mr-3 ${status === "Active"
-                    ? "bg-green-500"
-                    : status === "On Leave"
-                      ? "bg-yellow-500"
-                      : status === "Pending"
-                        ? "bg-blue-500"
-                        : "bg-gray-400"
+                      ? "bg-green-500"
+                      : status === "On Leave"
+                        ? "bg-yellow-500"
+                        : status === "Pending"
+                          ? "bg-blue-500"
+                          : "bg-gray-400"
                     }`}></div>
                   <span className={`text-sm ${status === "Active"
-                    ? "text-green-700"
-                    : status === "On Leave"
-                      ? "text-yellow-700"
-                      : status === "Pending"
-                        ? "text-blue-700"
-                        : "text-gray-600"
+                      ? "text-green-700"
+                      : status === "On Leave"
+                        ? "text-yellow-700"
+                        : status === "Pending"
+                          ? "text-blue-700"
+                          : "text-gray-600"
                     }`}>
                     {status === "Active"
                       ? '✓ HR Manager is active and can perform all HR functions.'
@@ -762,10 +933,49 @@ const AddNewHrManager: React.FC = () => {
               </div>
             </div>
 
+            {/* Summary Card */}
             <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
-              <h4 className="font-medium text-blue-800 mb-4">Ready to Create HR Manager</h4>
+              <h4 className="font-medium text-blue-800 mb-4">
+                {mode === "add" ? "Ready to Create HR Manager" : "Ready to Update HR Manager"}
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-blue-700 text-sm font-medium">Basic Information</p>
+                  <p className="text-blue-600 text-sm">
+                    {watch("hrName")}
+                    <br />
+                    {watch("hrCode")}
+                    <br />
+                    {watch("email")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-blue-700 text-sm font-medium">Professional Details</p>
+                  <p className="text-blue-600 text-sm">
+                    {watch("company")}
+                    <br />
+                    {watch("department")}
+                    <br />
+                    {watch("yearsOfExperience")} years experience
+                  </p>
+                </div>
+              </div>
+              {selectedQualifications.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-blue-700 text-sm font-medium">Qualifications</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {selectedQualifications.map((qual, index) => (
+                      <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                        {qual}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="text-blue-700 text-sm mb-3">
-                Review all information before submitting. You can edit any step by going back.
+                {mode === "add"
+                  ? "Review all information before submitting. You can edit any step by going back."
+                  : "Review all changes before updating. You can edit any step by going back."}
               </p>
               <ul className="text-blue-700 text-sm space-y-2">
                 <li className="flex items-center">
@@ -784,7 +994,7 @@ const AddNewHrManager: React.FC = () => {
                   <svg className="w-4 h-4 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  Professional details are added
+                  Professional details are set
                 </li>
               </ul>
             </div>
@@ -798,6 +1008,7 @@ const AddNewHrManager: React.FC = () => {
 
   return (
     <div className="app__slide-wrapper">
+      {/* Breadcrumb */}
       <div className="breadcrumb__wrapper mb-[25px]">
         <nav>
           <ol className="breadcrumb flex items-center mb-0">
@@ -807,17 +1018,34 @@ const AddNewHrManager: React.FC = () => {
             <li className="breadcrumb-item">
               <Link href="/super-admin">Super Admin</Link>
             </li>
-            <li className="breadcrumb-item active">Add HR Manager</li>
+            <li className="breadcrumb-item">
+              <Link href="/super-admin/hr-managers">HR Managers</Link>
+            </li>
+            <li className="breadcrumb-item active">
+              {mode === "add" ? "Add HR Manager" : `Edit HR Manager`}
+            </li>
           </ol>
         </nav>
       </div>
 
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800">Add New HR Manager</h1>
-        <p className="text-gray-600 mt-2">Fill in the HR manager details step by step</p>
+        <h1 className="text-2xl font-bold text-gray-800">
+          {mode === "add" ? "Add New HR Manager" : `Edit HR Manager`}
+        </h1>
+        <p className="text-gray-600 mt-2">
+          {mode === "add" ? "Fill in the HR manager details step by step" : "Update HR manager information"}
+          {mode === "edit" && hrManagerData && (
+            <span className="ml-2 text-sm bg-gray-100 px-2 py-1 rounded">
+              ID: {hrManagerData.hrCode}
+            </span>
+          )}
+        </p>
       </div>
 
+      {/* Form Card */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Stepper */}
         <div className="p-10">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-700">
@@ -827,6 +1055,16 @@ const AddNewHrManager: React.FC = () => {
               <span className="bg-primary/10 text-primary px-3 py-1 rounded-full">
                 {Math.round(((activeIndex + 1) / steps.length) * 100)}% Complete
               </span>
+              {mode === "edit" && hrManagerData && (
+                <span className={`ml-2 px-2 py-1 rounded text-xs ${hrManagerData.status === "Active"
+                    ? "bg-green-100 text-green-800"
+                    : hrManagerData.status === "Inactive"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }`}>
+                  {hrManagerData.status}
+                </span>
+              )}
             </div>
           </div>
 
@@ -836,8 +1074,8 @@ const AddNewHrManager: React.FC = () => {
                 <div className="flex flex-col items-center">
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${index <= activeIndex
-                      ? "bg-primary text-white"
-                      : "bg-gray-200 text-gray-500"
+                        ? "bg-primary text-white"
+                        : "bg-gray-200 text-gray-500"
                       }`}
                   >
                     {index + 1}
@@ -880,15 +1118,18 @@ const AddNewHrManager: React.FC = () => {
           </div>
         </div>
 
+        {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="p-8">
             {renderStepContent(activeIndex)}
 
+            {/* Navigation Buttons */}
             <div className="flex justify-between items-center mt-10 pt-8 border-t border-gray-200">
               <button
                 type="button"
-                onClick={() => router.push("/super-admin/hr-managers")}
+                onClick={handleCancel}
                 className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
@@ -899,6 +1140,7 @@ const AddNewHrManager: React.FC = () => {
                     type="button"
                     className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
                     onClick={handlePreviousStep}
+                    disabled={isSubmitting}
                   >
                     Previous
                   </button>
@@ -907,22 +1149,34 @@ const AddNewHrManager: React.FC = () => {
                 {activeIndex < steps.length - 1 ? (
                   <button
                     type="button"
-                    className="px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
                     onClick={handleNextStep}
+                    disabled={isSubmitting}
                   >
                     Next Step
                   </button>
                 ) : (
                   <button
                     type="submit"
-                    className="px-8 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="px-8 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
+                    disabled={isSubmitting}
                   >
-                    <div className="flex items-center">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      Create HR Manager
-                    </div>
+                    {isSubmitting ? (
+                      <div className="flex items-center">
+                        <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {mode === "add" ? "Creating..." : "Updating..."}
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        {mode === "add" ? "Create HR Manager" : "Update HR Manager"}
+                      </div>
+                    )}
                   </button>
                 )}
               </div>
@@ -931,19 +1185,25 @@ const AddNewHrManager: React.FC = () => {
         </form>
       </div>
 
+      {/* Tips */}
       <div className="mt-8 p-6 bg-blue-50 rounded-xl border border-blue-200">
         <div className="flex items-start">
           <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <div>
-            <h4 className="font-medium text-blue-800">Tips for adding a new HR manager</h4>
+            <h4 className="font-medium text-blue-800">
+              {mode === "add" ? "Tips for adding a new HR manager" : "Tips for editing HR manager"}
+            </h4>
             <ul className="mt-2 text-blue-700 text-sm space-y-1">
               <li>• Use the auto-suggest dropdowns for consistent data entry</li>
               <li>• Add relevant qualifications and certifications for better profile</li>
               <li>• Ensure contact information is accurate for communication</li>
               <li>• Set appropriate status based on HR {`manager's`} availability</li>
               <li>• All fields marked with * are required</li>
+              {mode === "edit" && (
+                <li>• HR Code cannot be changed after creation</li>
+              )}
             </ul>
           </div>
         </div>
@@ -952,4 +1212,4 @@ const AddNewHrManager: React.FC = () => {
   );
 };
 
-export default AddNewHrManager;
+export default AddEditHrManagerMainArea;

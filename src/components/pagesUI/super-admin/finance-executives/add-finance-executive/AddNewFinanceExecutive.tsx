@@ -299,6 +299,7 @@ const AddNewFinanceExecutive: React.FC = () => {
                 id="executiveCode"
                 label="Employee Code"
                 required
+                defaultValue={"FE-"}
                 register={register("executiveCode", {
                   required: "Employee Code is required",
                   pattern: {

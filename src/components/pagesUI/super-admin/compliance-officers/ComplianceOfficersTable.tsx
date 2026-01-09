@@ -601,11 +601,7 @@ const ComplianceOfficersTable: React.FC<ComplianceOfficersTableProps> = ({
                                   <button
                                     type="button"
                                     className="table__icon edit p-1.5 hover:bg-green-100 rounded"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditData(row);
-                                      setEditModalOpen(true);
-                                    }}
+                                    onClick={()=>router.push(`/super-admin/compliance-officers/update-compliance-officer/${row.id}`)}
                                     title="Edit Compliance Officer"
                                   >
                                     <EditIcon fontSize="small" className="text-green-600" />

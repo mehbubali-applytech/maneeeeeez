@@ -10,18 +10,42 @@ import {
   Autocomplete,
   TextField,
   Radio,
-  RadioGroup,
-  FormControlLabel,
   Checkbox,
-  FormGroup,
-  FormControl,
-  FormLabel,
-  Select,
-  MenuItem,
+  Chip,
+  Divider,
+  Slider,
 } from "@mui/material";
 
 // Types
-interface ICompanyRegistration {
+interface ICompany {
+  id: string;
+  companyName: string;
+  registrationNumber?: string;
+  domain: string;
+  logo?: string;
+  employeeLimit?: number;
+  notes?: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerPhone?: string;
+  modules: {
+    attendance: boolean;
+    leaveManagement: boolean;
+    payroll: boolean;
+    offerLetters: boolean;
+    compliance: boolean;
+  };
+  attendanceLevel: "basic" | "advanced";
+  payrollLevel: "basic" | "advanced";
+  subscriptionPlan: "free" | "pro" | "enterprise";
+  timezone: string;
+  currency: string;
+  status: "active" | "inactive" | "pending" | "suspended";
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ICompanyForm {
   // Step 1: Company Details
   companyName: string;
   registrationNumber: string;
@@ -57,7 +81,7 @@ interface ICompanyRegistration {
 }
 
 interface ModuleOption {
-  id: keyof ICompanyRegistration['modules'];
+  id: keyof ICompanyForm['modules'];
   label: string;
   description: string;
   note?: string;
@@ -65,9 +89,10 @@ interface ModuleOption {
 }
 
 interface PlanOption {
-  id: ICompanyRegistration['subscriptionPlan'];
+  id: ICompanyForm['subscriptionPlan'];
   label: string;
   description: string;
+  price: string;
   limits: string[];
 }
 
@@ -144,27 +169,39 @@ const plans: PlanOption[] = [
     id: "free",
     label: "Free",
     description: "Basic features for small teams",
+    price: "$0/month",
     limits: ["Up to 10 employees", "Basic support", "1GB storage"],
   },
   {
     id: "pro",
     label: "Pro",
     description: "Advanced features for growing businesses",
+    price: "$29/month",
     limits: ["Up to 100 employees", "Priority support", "10GB storage", "Custom reports"],
   },
   {
     id: "enterprise",
     label: "Enterprise",
     description: "Full suite for large organizations",
+    price: "Custom",
     limits: ["Unlimited employees", "24/7 support", "100GB storage", "API access", "Custom integrations"],
   },
 ];
 
-const RegisterCompanyWizard: React.FC = () => {
+interface AddEditCompanyMainAreaProps {
+  mode?: "add" | "edit";
+  companyData?: ICompany | null;
+}
+
+const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
+  mode = "add",
+  companyData = null,
+}) => {
   const router = useRouter();
   const [activeStep, setActiveStep] = useState(0);
   const [emailVerified, setEmailVerified] = useState(false);
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
@@ -173,9 +210,10 @@ const RegisterCompanyWizard: React.FC = () => {
     watch,
     setValue,
     trigger,
-    formState: { errors, isValid },
+    reset,
+    formState: { errors, isDirty },
     getValues,
-  } = useForm<ICompanyRegistration>({
+  } = useForm<ICompanyForm>({
     defaultValues: {
       companyName: "",
       registrationNumber: "",
@@ -210,17 +248,17 @@ const RegisterCompanyWizard: React.FC = () => {
     { label: "Company Details", description: "Enter basic company information" },
     { label: "Owner Details", description: "Provide owner/admin information" },
     { label: "Modules & Plan", description: "Select modules and subscription plan" },
-    { label: "Confirm & Submit", description: "Review and complete registration" },
+    { label: "Confirm & Submit", description: "Review and complete" },
   ];
 
   const companyName = watch("companyName");
   const modulesSelected = watch("modules");
   const selectedModules = Object.values(modulesSelected).filter(Boolean).length;
-  const payrollSelected = watch("modules.payroll");
+  const subscriptionPlan = watch("subscriptionPlan");
 
-  // Auto-suggest domain
+  // Auto-suggest domain for add mode
   useEffect(() => {
-    if (companyName && !watch("domain")) {
+    if (mode === "add" && companyName && !watch("domain")) {
       const suggestedDomain = companyName
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "-")
@@ -228,7 +266,45 @@ const RegisterCompanyWizard: React.FC = () => {
         .replace(/^-|-$/g, "");
       setValue("domain", `${suggestedDomain}.myhrms.com`);
     }
-  }, [companyName, setValue, watch]);
+  }, [companyName, setValue, watch, mode]);
+
+  // Load company data in edit mode
+  useEffect(() => {
+    if (mode === "edit" && companyData) {
+      // Transform company data to form data
+      const formData: Partial<ICompanyForm> = {
+        companyName: companyData.companyName,
+        registrationNumber: companyData.registrationNumber || "",
+        domain: companyData.domain,
+        logoPreview: companyData.logo || "",
+        employeeLimit: companyData.employeeLimit || "",
+        notes: companyData.notes || "",
+        ownerName: companyData.ownerName,
+        ownerEmail: companyData.ownerEmail,
+        ownerPhone: companyData.ownerPhone || "",
+        modules: companyData.modules,
+        attendanceLevel: companyData.attendanceLevel,
+        payrollLevel: companyData.payrollLevel,
+        subscriptionPlan: companyData.subscriptionPlan,
+        timezone: companyData.timezone,
+        currency: companyData.currency,
+        acceptTerms: true, // Assume accepted for edit
+        sendActivationEmail: false, // Don't send email on edit
+        finalComments: "",
+      };
+
+      // Set form values
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          const formKey = key as Extract<keyof ICompanyForm, string>;
+          setValue(formKey, value as any);
+        }
+      });
+
+      // Mark email as verified for existing company
+      setEmailVerified(true);
+    }
+  }, [mode, companyData, setValue]);
 
   // Handle file upload
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -253,7 +329,7 @@ const RegisterCompanyWizard: React.FC = () => {
     }
   };
 
-  // Verify email uniqueness
+  // Verify email uniqueness (only for add mode)
   const verifyEmail = async () => {
     const email = watch("ownerEmail");
     if (!email || errors.ownerEmail) {
@@ -280,7 +356,7 @@ const RegisterCompanyWizard: React.FC = () => {
     const isValid = await trigger(currentStepFields as any);
 
     if (isValid) {
-      if (activeStep === 1 && !emailVerified) {
+      if (activeStep === 1 && mode === "add" && !emailVerified) {
         toast.warning("Please verify the email address before proceeding");
         return;
       }
@@ -298,7 +374,7 @@ const RegisterCompanyWizard: React.FC = () => {
     setActiveStep(activeStep - 1);
   };
 
-  const getStepFields = (step: number): (keyof ICompanyRegistration)[] => {
+  const getStepFields = (step: number): (keyof ICompanyForm)[] => {
     switch (step) {
       case 0:
         return ["companyName"];
@@ -311,39 +387,65 @@ const RegisterCompanyWizard: React.FC = () => {
     }
   };
 
-  const onSubmit = async (data: ICompanyRegistration) => {
+  const onSubmit = async (data: ICompanyForm) => {
     if (!data.acceptTerms) {
       toast.error("Please accept the Terms & Conditions");
       return;
     }
 
-    // Create FormData for file upload
-    const formData = new FormData();
-    Object.entries(data).forEach(([key, value]) => {
-      if (key === "logo" && value instanceof File) {
-        formData.append(key, value);
-      } else if (key === "modules") {
-        formData.append(key, JSON.stringify(value));
-      } else {
-        formData.append(key, String(value));
+    setIsSubmitting(true);
+
+    try {
+      // Create FormData for file upload
+      const formData = new FormData();
+      Object.entries(data).forEach(([key, value]) => {
+        if (key === "logo" && value instanceof File) {
+          formData.append(key, value);
+        } else if (key === "modules") {
+          formData.append(key, JSON.stringify(value));
+        } else {
+          formData.append(key, String(value));
+        }
+      });
+
+      // Add mode-specific data
+      if (mode === "edit" && companyData) {
+        formData.append("id", companyData.id);
+        formData.append("status", companyData.status);
       }
-    });
 
-    // Mock API call
-    toast.loading("Creating company...");
-    setTimeout(() => {
-      toast.dismiss();
-      toast.success("Company created successfully!");
+      // Mock API call
+      console.log(`${mode === "add" ? "Creating" : "Updating"} company:`, Object.fromEntries(formData));
 
-      if (data.sendActivationEmail) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      toast.success(mode === "add" ? "Company created successfully!" : "Company updated successfully!");
+
+      if (mode === "add" && data.sendActivationEmail) {
         toast.success("Activation email sent to owner");
       }
 
-      // Navigate to success page
+      // Navigate to companies list
       setTimeout(() => {
         router.push("/super-admin/companies");
-      }, 1500);
-    }, 2000);
+      }, 1000);
+
+    } catch (error) {
+      console.error(`Error ${mode === "add" ? "creating" : "updating"} company:`, error);
+      toast.error(mode === "add" ? "Failed to create company" : "Failed to update company");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancel = () => {
+    if (isDirty) {
+      if (confirm("You have unsaved changes. Are you sure you want to leave?")) {
+        router.push("/super-admin/companies");
+      }
+    } else {
+      router.push("/super-admin/companies");
+    }
   };
 
   const renderStepContent = (step: number) => {
@@ -367,9 +469,13 @@ const RegisterCompanyWizard: React.FC = () => {
                     message: "Maximum 150 characters allowed",
                   },
                 })}
+                disabled={mode === "edit"} // Company name cannot be changed after creation
               />
               {errors.companyName && (
                 <p className="text-red-500 text-sm mt-1">{errors.companyName.message}</p>
+              )}
+              {mode === "edit" && (
+                <p className="text-gray-500 text-sm mt-1">Company name cannot be changed after creation</p>
               )}
               <div className="flex justify-between mt-1">
                 <span className="text-sm text-gray-500">
@@ -400,16 +506,22 @@ const RegisterCompanyWizard: React.FC = () => {
               </label>
               <input
                 type="text"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors ${
+                  mode === "edit" ? "bg-gray-100" : ""
+                }`}
                 {...register("domain", {
                   pattern: {
                     value: /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myhrms\.com$/,
                     message: "Must be in format: yourcompany.myhrms.com",
                   },
                 })}
+                disabled={mode === "edit"} // Domain cannot be changed after creation
               />
               {errors.domain && (
                 <p className="text-red-500 text-sm mt-1">{errors.domain.message}</p>
+              )}
+              {mode === "edit" && (
+                <p className="text-gray-500 text-sm mt-1">Domain cannot be changed after creation</p>
               )}
               <p className="text-sm text-gray-500 mt-1">
                 e.g. acme.myhrms.com
@@ -430,6 +542,7 @@ const RegisterCompanyWizard: React.FC = () => {
                         alt="Logo preview"
                         fill
                         className="object-contain p-2"
+                        unoptimized={true} // For data URLs
                       />
                     </div>
                   ) : (
@@ -449,7 +562,7 @@ const RegisterCompanyWizard: React.FC = () => {
                       onChange={handleFileUpload}
                     />
                     <div className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
-                      Upload Logo
+                      {watch("logoPreview") ? "Change Logo" : "Upload Logo"}
                     </div>
                   </label>
                   <p className="text-sm text-gray-500 mt-1">
@@ -462,7 +575,7 @@ const RegisterCompanyWizard: React.FC = () => {
             {/* Employee Limit */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Initial Employee Limit
+                Employee Limit
               </label>
               <input
                 type="number"
@@ -490,10 +603,8 @@ const RegisterCompanyWizard: React.FC = () => {
                 rows={3}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
                 {...register("notes")}
+                placeholder="For internal remarks or setup notes"
               />
-              <p className="text-sm text-gray-500 mt-1">
-                For internal remarks or setup notes
-              </p>
             </div>
           </div>
         );
@@ -509,7 +620,10 @@ const RegisterCompanyWizard: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm text-blue-700">
-                  This person will be assigned as Company Admin after activation.
+                  {mode === "add" 
+                    ? "This person will be assigned as Company Admin after activation."
+                    : "Company admin details. Email cannot be changed."
+                  }
                 </p>
               </div>
             </div>
@@ -517,13 +631,13 @@ const RegisterCompanyWizard: React.FC = () => {
             {/* Owner Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Owner Full Name <span className="text-red-500">*</span>
+                Admin Full Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
                 {...register("ownerName", {
-                  required: "Owner name is required",
+                  required: "Admin name is required",
                 })}
               />
               {errors.ownerName && (
@@ -534,42 +648,50 @@ const RegisterCompanyWizard: React.FC = () => {
             {/* Owner Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Owner Email Address <span className="text-red-500">*</span>
+                Admin Email Address <span className="text-red-500">*</span>
               </label>
               <div className="flex space-x-2">
                 <input
                   type="email"
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                  className={`flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors ${
+                    mode === "edit" ? "bg-gray-100" : ""
+                  }`}
                   {...register("ownerEmail", {
                     required: "Email is required",
                     pattern: {
                       value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
                       message: "Invalid email address",
                     },
-                    onChange: () => setEmailVerified(false),
+                    onChange: () => mode === "add" && setEmailVerified(false),
                   })}
+                  disabled={mode === "edit"} // Email cannot be changed after creation
                 />
-                <button
-                  type="button"
-                  onClick={verifyEmail}
-                  disabled={isVerifyingEmail || !!errors.ownerEmail || !watch("ownerEmail")}
-                  className="px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isVerifyingEmail ? "Verifying..." : emailVerified ? "✓ Verified" : "Verify"}
-                </button>
+                {mode === "add" && (
+                  <button
+                    type="button"
+                    onClick={verifyEmail}
+                    disabled={isVerifyingEmail || !!errors.ownerEmail || !watch("ownerEmail")}
+                    className="px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isVerifyingEmail ? "Verifying..." : emailVerified ? "✓ Verified" : "Verify"}
+                  </button>
+                )}
               </div>
               {errors.ownerEmail && (
                 <p className="text-red-500 text-sm mt-1">{errors.ownerEmail.message}</p>
               )}
-              {emailVerified && (
+              {mode === "add" && emailVerified && (
                 <p className="text-green-600 text-sm mt-1">✓ Email is available</p>
+              )}
+              {mode === "edit" && (
+                <p className="text-gray-500 text-sm mt-1">Email cannot be changed after creation</p>
               )}
             </div>
 
             {/* Owner Phone */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Owner Phone Number
+                Admin Phone Number
               </label>
               <input
                 type="tel"
@@ -685,7 +807,7 @@ const RegisterCompanyWizard: React.FC = () => {
                                   <p className="text-sm text-gray-600">{plan.description}</p>
                                 </div>
                                 <span className="text-lg font-semibold text-primary">
-                                  {plan.id === "free" ? "$0" : plan.id === "pro" ? "$29" : "Custom"}
+                                  {plan.price}
                                 </span>
                               </div>
                               <ul className="mt-3 space-y-1">
@@ -769,7 +891,9 @@ const RegisterCompanyWizard: React.FC = () => {
             {/* Review Summary */}
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-gray-800">Review Summary</h3>
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {mode === "add" ? "Review Summary" : "Update Summary"}
+                </h3>
                 <button
                   type="button"
                   onClick={() => setActiveStep(0)}
@@ -807,7 +931,7 @@ const RegisterCompanyWizard: React.FC = () => {
               {/* Owner Info */}
               <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex justify-between items-start">
-                  <h4 className="font-medium text-gray-700 mb-2">Owner Details</h4>
+                  <h4 className="font-medium text-gray-700 mb-2">Admin Details</h4>
                   <button
                     type="button"
                     onClick={() => setActiveStep(1)}
@@ -851,26 +975,28 @@ const RegisterCompanyWizard: React.FC = () => {
                   <div>
                     <span className="text-gray-500">Selected Modules:</span>
                     <div className="mt-1 flex flex-wrap gap-2">
-                   {Object.entries(formData.modules)
-  .filter(([_, selected]) => selected)
-  .map(([key]) => {
-    const moduleItem = modules.find(m => m.id === key);
-    return (
-      <span
-        key={key}
-        className="px-2 py-1 bg-primary/10 text-primary rounded text-xs"
-      >
-        {moduleItem?.label}
-      </span>
-    );
-  })}
-
+                      {Object.entries(formData.modules)
+                        .filter(([_, selected]) => selected)
+                        .map(([key]) => {
+                          const moduleItem = modules.find(m => m.id === key);
+                          return (
+                            <span
+                              key={key}
+                              className="px-2 py-1 bg-primary/10 text-primary rounded text-xs"
+                            >
+                              {moduleItem?.label}
+                            </span>
+                          );
+                        })}
                     </div>
                   </div>
                   <div>
                     <span className="text-gray-500">Subscription Plan:</span>
                     <span className="ml-2 font-medium">
                       {plans.find(p => p.id === formData.subscriptionPlan)?.label}
+                    </span>
+                    <span className="ml-2 text-primary">
+                      ({plans.find(p => p.id === formData.subscriptionPlan)?.price})
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -891,97 +1017,105 @@ const RegisterCompanyWizard: React.FC = () => {
               </div>
             </div>
 
-            {/* Terms & Conditions */}
-            <div className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-start space-x-3">
-                <Controller
-                  name="acceptTerms"
-                  control={control}
-                  render={({ field }) => (
-                    <Checkbox
-                      checked={field.value}
-                      onChange={field.onChange}
-                      className="mt-1"
-                    />
-                  )}
-                />
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Accept Terms & Conditions <span className="text-red-500">*</span>
-                  </label>
-                  <p className="text-sm text-gray-600 mt-1">
-                    I agree to the{" "}
-                    <button
-                      type="button"
-                      className="text-primary hover:text-primary/80 font-medium"
-                      onClick={() => toast.info("Terms & Conditions modal would open here")}
-                    >
-                      Terms of Service
-                    </button>{" "}
-                    and{" "}
-                    <button
-                      type="button"
-                      className="text-primary hover:text-primary/80 font-medium"
-                      onClick={() => toast.info("Privacy Policy modal would open here")}
-                    >
-                      Privacy Policy
-                    </button>
-                  </p>
-                </div>
-              </div>
-              {errors.acceptTerms && (
-                <p className="text-red-500 text-sm mt-2">You must accept the Terms & Conditions</p>
-              )}
-            </div>
-
-            {/* Activation Email Toggle */}
-            <div className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium text-gray-700">Send Activation Email Now</h4>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {watch("sendActivationEmail")
-                      ? "Invitation email will be sent immediately to the owner"
-                      : "Company will remain in 'Pending Activation' status"}
-                  </p>
-                </div>
-                <Controller
-                  name="sendActivationEmail"
-                  control={control}
-                  render={({ field }) => (
-                    <div className="relative inline-block w-12 h-6">
-                      <input
-                        type="checkbox"
+            {/* Terms & Conditions (only for add mode) */}
+            {mode === "add" && (
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <Controller
+                    name="acceptTerms"
+                    control={control}
+                    render={({ field }) => (
+                      <Checkbox
                         checked={field.value}
                         onChange={field.onChange}
-                        className="sr-only"
-                        id="activation-toggle"
+                        className="mt-1"
                       />
-                      <label
-                        htmlFor="activation-toggle"
-                        className={`block w-12 h-6 rounded-full cursor-pointer transition-colors ${field.value ? "bg-primary" : "bg-gray-300"
-                          }`}
+                    )}
+                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Accept Terms & Conditions <span className="text-red-500">*</span>
+                    </label>
+                    <p className="text-sm text-gray-600 mt-1">
+                      I agree to the{" "}
+                      <button
+                        type="button"
+                        className="text-primary hover:text-primary/80 font-medium"
+                        onClick={() => toast.info("Terms & Conditions modal would open here")}
                       >
-                        <span
-                          className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${field.value ? "transform translate-x-6" : ""
-                            }`}
-                        />
-                      </label>
-                    </div>
-                  )}
-                />
+                        Terms of Service
+                      </button>{" "}
+                      and{" "}
+                      <button
+                        type="button"
+                        className="text-primary hover:text-primary/80 font-medium"
+                        onClick={() => toast.info("Privacy Policy modal would open here")}
+                      >
+                        Privacy Policy
+                      </button>
+                    </p>
+                  </div>
+                </div>
+                {errors.acceptTerms && (
+                  <p className="text-red-500 text-sm mt-2">You must accept the Terms & Conditions</p>
+                )}
               </div>
-            </div>
+            )}
+
+            {/* Activation Email Toggle (only for add mode) */}
+            {mode === "add" && (
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-gray-700">Send Activation Email Now</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {watch("sendActivationEmail")
+                        ? "Invitation email will be sent immediately to the admin"
+                        : "Company will remain in 'Pending Activation' status"}
+                    </p>
+                  </div>
+                  <Controller
+                    name="sendActivationEmail"
+                    control={control}
+                    render={({ field }) => (
+                      <div className="relative inline-block w-12 h-6">
+                        <input
+                          type="checkbox"
+                          checked={field.value}
+                          onChange={field.onChange}
+                          className="sr-only"
+                          id="activation-toggle"
+                        />
+                        <label
+                          htmlFor="activation-toggle"
+                          className={`block w-12 h-6 rounded-full cursor-pointer transition-colors ${field.value ? "bg-primary" : "bg-gray-300"
+                            }`}
+                        >
+                          <span
+                            className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${field.value ? "transform translate-x-6" : ""
+                              }`}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Final Comments */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Final Comments / Notes
+                {mode === "add" ? "Final Comments / Notes" : "Update Notes"}
               </label>
               <textarea
                 rows={3}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
-                placeholder="e.g., 'Custom branding requested', 'Special pricing applied', etc."
+                placeholder={
+                  mode === "add" 
+                    ? "e.g., 'Custom branding requested', 'Special pricing applied', etc."
+                    : "Describe the changes made or any special instructions..."
+                }
                 {...register("finalComments")}
               />
             </div>
@@ -1005,15 +1139,29 @@ const RegisterCompanyWizard: React.FC = () => {
             <li className="breadcrumb-item">
               <Link href="/super-admin">Super Admin</Link>
             </li>
-            <li className="breadcrumb-item active">Register Company</li>
+            <li className="breadcrumb-item">
+              <Link href="/super-admin/companies">Companies</Link>
+            </li>
+            <li className="breadcrumb-item active">
+              {mode === "add" ? "Register Company" : `Edit Company`}
+            </li>
           </ol>
         </nav>
       </div>
 
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800">Register New Company</h1>
-        <p className="text-gray-600 mt-2">Onboard a new company step by step</p>
+        <h1 className="text-2xl font-bold text-gray-800">
+          {mode === "add" ? "Register New Company" : `Edit Company: ${companyData?.companyName}`}
+        </h1>
+        <p className="text-gray-600 mt-2">
+          {mode === "add" ? "Onboard a new company step by step" : "Update company information"}
+          {mode === "edit" && companyData && (
+            <span className="ml-2 text-sm bg-gray-100 px-2 py-1 rounded">
+              ID: {companyData.id}
+            </span>
+          )}
+        </p>
       </div>
 
       {/* Wizard Card */}
@@ -1031,6 +1179,17 @@ const RegisterCompanyWizard: React.FC = () => {
               <span className="bg-primary/10 text-primary px-3 py-1 rounded-full">
                 {Math.round(((activeStep + 1) / steps.length) * 100)}% Complete
               </span>
+              {mode === "edit" && companyData && (
+                <span className={`ml-2 px-2 py-1 rounded text-xs ${
+                  companyData.status === "active" 
+                    ? "bg-green-100 text-green-800"
+                    : companyData.status === "inactive"
+                    ? "bg-red-100 text-red-800"
+                    : "bg-yellow-100 text-yellow-800"
+                }`}>
+                  {companyData.status.charAt(0).toUpperCase() + companyData.status.slice(1)}
+                </span>
+              )}
             </div>
           </div>
 
@@ -1075,52 +1234,58 @@ const RegisterCompanyWizard: React.FC = () => {
           <div className="px-8 py-6 border-t border-gray-200 bg-gray-50">
             <div className="flex justify-between items-center">
               <div>
-                {activeStep === 3 && (
-                  <button
-                    type="button"
-                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Save as Draft
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
               </div>
               <div className="flex items-center space-x-4">
-                {activeStep > 0 ? (
+                {activeStep > 0 && (
                   <button
                     type="button"
-                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
                     onClick={handlePreviousStep}
+                    disabled={isSubmitting}
                   >
                     Previous
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                    onClick={() => router.push("/super-admin/companies")}
-                  >
-                    Cancel
                   </button>
                 )}
 
                 {activeStep < steps.length - 1 ? (
                   <button
                     type="button"
-                    className="px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors"
+                    className="px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
                     onClick={handleNextStep}
+                    disabled={isSubmitting}
                   >
                     Next Step
                   </button>
                 ) : (
                   <button
                     type="submit"
-                    className="px-8 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors flex items-center"
-                    disabled={!watch("acceptTerms")}
+                    className="px-8 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
+                    disabled={isSubmitting || (mode === "add" && !watch("acceptTerms"))}
                   >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Create Company & Invite Owner
+                    {isSubmitting ? (
+                      <div className="flex items-center">
+                        <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {mode === "add" ? "Creating..." : "Updating..."}
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        {mode === "add" ? "Create Company & Invite Admin" : "Update Company"}
+                      </div>
+                    )}
                   </button>
                 )}
               </div>
@@ -1136,13 +1301,27 @@ const RegisterCompanyWizard: React.FC = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <div>
-            <h4 className="font-medium text-blue-800">Onboarding Tips</h4>
+            <h4 className="font-medium text-blue-800">
+              {mode === "add" ? "Onboarding Tips" : "Editing Tips"}
+            </h4>
             <ul className="mt-2 text-blue-700 text-sm space-y-1">
-              <li>• Company domain must end with <code>.myhrms.com</code></li>
-              <li>• Verify owner email to ensure uniqueness before proceeding</li>
-              <li>• At least one module must be selected for company setup</li>
-              <li>• Timezone and currency settings affect payroll and attendance calculations</li>
-              <li>• Activation emails include temporary credentials for owner login</li>
+              {mode === "add" ? (
+                <>
+                  <li>• Company domain must end with <code>.myhrms.com</code></li>
+                  <li>• Verify admin email to ensure uniqueness before proceeding</li>
+                  <li>• At least one module must be selected for company setup</li>
+                  <li>• Timezone and currency settings affect payroll and attendance calculations</li>
+                  <li>• Activation emails include temporary credentials for admin login</li>
+                </>
+              ) : (
+                <>
+                  <li>• Company name and domain cannot be changed after creation</li>
+                  <li>• Admin email cannot be changed for security reasons</li>
+                  <li>• Changing subscription plan may affect billing</li>
+                  <li>• Module changes may require additional configuration</li>
+                  <li>• Timezone changes affect future date calculations</li>
+                </>
+              )}
             </ul>
           </div>
         </div>
@@ -1151,4 +1330,4 @@ const RegisterCompanyWizard: React.FC = () => {
   );
 };
 
-export default RegisterCompanyWizard;
+export default AddEditCompanyMainArea;

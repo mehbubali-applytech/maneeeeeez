@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import EmployeesTable from "./EmployeesTable";
 import AddNewEmployeeModal from "./AddNewEmployee";
 import { IEmployee, createMockEmployees } from "../../owner/employees/EmployeeTypes";
+import { useRouter } from "next/navigation";
 
 // Create dummy data using the helper function
 const dummyEmployeeData: IEmployee[] = createMockEmployees(10);
@@ -12,6 +13,7 @@ const EmployeesMainArea = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [employees, setEmployees] = useState<IEmployee[]>(dummyEmployeeData);
   const [searchTerm, setSearchTerm] = useState("");
+  const router = useRouter();
 
   // Memoize filtered employees
   const filteredEmployees = useMemo(() => {
@@ -28,9 +30,6 @@ const EmployeesMainArea = () => {
     );
   }, [employees, searchTerm]);
 
-  const handleAddEmployee = (newEmployee: IEmployee) => {
-    setEmployees(prev => [newEmployee, ...prev]);
-  };
 
   const handleUpdateEmployee = (updatedEmployee: IEmployee) => {
     setEmployees(prev => prev.map(emp => 
@@ -61,7 +60,7 @@ const EmployeesMainArea = () => {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => setModalOpen(true)}
+            onClick={() => router.push('/super-admin/employees/add-employee')}
           >
             Add Employee
           </button>
@@ -121,14 +120,6 @@ const EmployeesMainArea = () => {
         onUpdateEmployee={handleUpdateEmployee}
         onDeleteEmployee={handleDeleteEmployee}
       />
-
-      {modalOpen && (
-        <AddNewEmployeeModal 
-          open={modalOpen} 
-          setOpen={setModalOpen}
-          onAddEmployee={handleAddEmployee}
-        />
-      )}
     </div>
   );
 };

@@ -32,6 +32,8 @@ import WorkIcon from "@mui/icons-material/Work";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import { IStaff } from "./staff.interface";
 import { DownloadButtonGroup, TableData } from "@/app/helpers/downloader";
+import { ro } from "date-fns/locale";
+import { useRouter } from "next/navigation";
 
 // Mock data for all staff across companies
 const allStaffData: IStaff[] = [
@@ -200,7 +202,6 @@ interface AllStaffTableProps {
   department?: string;
   company?: string;
   dateRange?: { start: string; end: string };
-  onEdit?: (staff: IStaff) => void;
   onDelete?: (id: number) => void;
 }
 
@@ -209,7 +210,6 @@ const StaffTable: React.FC<AllStaffTableProps> = ({
   department = "all",
   company = "all",
   dateRange,
-  onEdit,
   onDelete
 }) => {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -224,6 +224,7 @@ const StaffTable: React.FC<AllStaffTableProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("fullName");
+  const router = useRouter();
 
   // Filter data based on props (same as DepartmentTable)
   const filteredData = useMemo(() => {
@@ -700,12 +701,7 @@ const StaffTable: React.FC<AllStaffTableProps> = ({
                                   <button
                                     type="button"
                                     className="table__icon edit p-1.5 hover:bg-green-100 rounded"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (onEdit) {
-                                        onEdit(row);
-                                      }
-                                    }}
+                                    onClick={()=>router.push(`/super-admin/staff/update-staff/${row.id}`)}
                                     title="Edit Staff"
                                   >
                                     <EditIcon fontSize="small" className="text-green-600" />

@@ -737,11 +737,7 @@ const CompaniesTable: React.FC<AllCompaniesTableProps> = ({
                                   <button
                                     type="button"
                                     className="table__icon edit p-1.5 hover:bg-green-100 rounded"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      alert(`Editing ${row.name}...`);
-                                    }}
-                                    title="Edit Company"
+                                    onClick={()=>router.push(`/super-admin/companies/update-company/${row.id}`)}
                                   >
                                     <EditIcon fontSize="small" className="text-green-600" />
                                   </button>

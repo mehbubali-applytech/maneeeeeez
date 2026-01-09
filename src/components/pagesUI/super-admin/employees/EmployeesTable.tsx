@@ -291,12 +291,9 @@ const EmployeesTable: React.FC<Props> = ({ data, onUpdateEmployee, onDeleteEmplo
                             <div className="flex gap-2">
                               <button
                                 className="table__icon edit p-2 hover:bg-blue-50 rounded"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditData(row);
-                                  setUpdateModalOpen(true);
-                                }}
-                                title="Edit"
+                                onClick={(e) => router.push(
+                                  `/super-admin/employees/update-employee/${row.employeeId}`
+                                )}
                               >
                                 <i className="fa-light fa-pen text-blue-600"></i>
                               </button>

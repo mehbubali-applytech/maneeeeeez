@@ -6,9 +6,9 @@ import AddStaffMainArea from "@/components/pagesUI/super-admin/staff/add-staff/A
 const AllCompaniesPage = () => {
   return (
     <>
-      <MetaData pageTitle="Add Staff">
+      <MetaData pageTitle="Update Staff">
         <Wrapper role="super-admin">
-          <AddStaffMainArea mode="add" />
+          <AddStaffMainArea mode="edit" />
         </Wrapper>
       </MetaData>
     </>

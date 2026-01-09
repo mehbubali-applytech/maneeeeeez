@@ -34,7 +34,7 @@ const ComplianceOfficersMainArea = () => {
             <div className="breadcrumb__btn">
               <button
                 type="button"
-                onClick={() => router.push('/super-admin/compliance-officers/add-compliance-office')}
+                onClick={() => router.push('/super-admin/compliance-officers/add-compliance-officer')}
                 className="btn btn-primary"
               >
                 <i className="fa-regular fa-plus mr-2"></i>

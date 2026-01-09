@@ -39,6 +39,7 @@ export interface IHrManager {
 }
 
 export interface IHrManagerForm {
+  id?: number;
   hrName: string;
   hrCode: string;
   department: string;
@@ -63,14 +64,16 @@ export interface IHrManagerForm {
   country?: string;
   zipCode?: string;
   dateOfBirth?: string;
-  gender?: "Male" | "Female" | "Other";
-  maritalStatus?: "Single" | "Married" | "Divorced" | "Widowed";
+  gender?: "Male" | "Female" | "Other" | undefined;
+  maritalStatus?: "Single" | "Married" | "Divorced" | "Widowed" | undefined;
   emergencyContact?: string;
   emergencyPhone?: string;
   profileImage?: string;
   rating: number;
   tag: string;
   notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface HrManagerDetailsStatePropsType {

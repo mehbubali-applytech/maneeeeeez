@@ -2,11 +2,12 @@
 import Link from "next/link";
 import React, { useState } from "react";
 import VendorTable from "./VendorTable";
-import AddVendorModal from "./AddVendorModal"
 import VendorSummary from "./VendorSummary";
+import { useRouter } from "next/navigation";
 
 const VendorMainArea = () => {
   const [modalOpen, setModalOpen] = useState(false);
+  const router = useRouter();
   
   return (
     <>
@@ -25,7 +26,7 @@ const VendorMainArea = () => {
             <div className="breadcrumb__btn">
               <button
                 type="button"
-                onClick={() => setModalOpen(true)}
+                onClick={() => router.push('/owner/finance/vendors/add-vendor')}
                 className="btn btn-primary"
               >
                 Add Vendor
@@ -40,7 +41,6 @@ const VendorMainArea = () => {
         </div>
       </div>
       
-      {modalOpen && <AddVendorModal open={modalOpen} setOpen={setModalOpen} />}
     </>
   );
 };

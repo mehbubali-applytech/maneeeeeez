@@ -1,14 +1,15 @@
 import MetaData from "@/hooks/useMetaData";
 import Wrapper from "@/components/layouts/DefaultWrapper";
 import React from "react";
-import AddStaffMainArea from "@/components/pagesUI/super-admin/staff/add-staff/AddStaffMainArea";
+import OfferLetterMainArea from "@/components/pagesUI/owner/offer-letter/OfferLetterMainArea";
+
 
 const AllCompaniesPage = () => {
   return (
     <>
-      <MetaData pageTitle="Add Staff">
-        <Wrapper role="super-admin">
-          <AddStaffMainArea mode="add" />
+      <MetaData pageTitle="Overview">
+        <Wrapper role={"owner"}>
+          <OfferLetterMainArea />
         </Wrapper>
       </MetaData>
     </>

@@ -7,10 +7,10 @@ import { useForm, Controller } from "react-hook-form";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
-import { IStaffForm } from "../staff.interface";
+import { IStaffForm, IStaff } from "../staff.interface";
 import InputField from "@/components/elements/SharedInputs/InputField";
 
-// Mock data for dropdowns
+// Mock data for dropdowns (same as before)
 const positions = [
   "Software Engineer",
   "Senior Software Engineer",
@@ -112,7 +112,6 @@ const skillsList = [
   "AI",
 ];
 
-// Mock companies data (you can fetch from API)
 const companies = [
   { id: 1, name: "TechCorp Inc." },
   { id: 2, name: "Innovate Solutions" },
@@ -124,7 +123,6 @@ const companies = [
   { id: 8, name: "Mobile First" },
 ];
 
-// Mock supervisors data
 const supervisors = [
   "John Smith",
   "Emma Johnson",
@@ -136,7 +134,6 @@ const supervisors = [
   "Lisa Anderson",
 ];
 
-// Mock locations data
 const locations = [
   "New York Office",
   "London Office",
@@ -149,12 +146,21 @@ const locations = [
   "Hybrid",
 ];
 
-const AddStaffMainArea: React.FC = () => {
+interface AddStaffMainAreaProps {
+  mode?: "add" | "edit";
+  staffData?: IStaff | null;
+}
+
+const AddStaffMainArea: React.FC<AddStaffMainAreaProps> = ({
+  mode = "add",
+  staffData = null,
+}) => {
   const router = useRouter();
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<{ id: number; name: string } | null>(null);
   const [formData, setFormData] = useState<Partial<IStaffForm>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
@@ -164,7 +170,8 @@ const AddStaffMainArea: React.FC = () => {
     setValue,
     trigger,
     getValues,
-    formState: { errors },
+    reset,
+    formState: { errors, isDirty },
   } = useForm<IStaffForm>({
     defaultValues: {
       salary: 0,
@@ -172,6 +179,34 @@ const AddStaffMainArea: React.FC = () => {
       status: "Active",
       employmentType: "Full-time",
       currency: "USD",
+      ...(mode === "edit" && staffData ? {
+        firstName: staffData.firstName || "",
+        lastName: staffData.lastName || "",
+        email: staffData.email || "",
+        phone: staffData.phone || "",
+        mobile: staffData.mobile || "",
+        position: staffData.position || "",
+        department: staffData.department || "",
+        company: staffData.company || "",
+        companyId: staffData.companyId || 0,
+        location: staffData.location || "",
+        joinDate: staffData.joinDate || "",
+        status: staffData.status || "Active",
+        employmentType: staffData.employmentType || "Full-time",
+        salary: staffData.salary || 0,
+        currency: staffData.currency || "USD",
+        supervisor: staffData.supervisor || "",
+        gender: staffData.gender || "",
+        dateOfBirth: staffData.dateOfBirth || "",
+        address: staffData.address || "",
+        city: staffData.city || "",
+        country: staffData.country || "",
+        zipCode: staffData.zipCode || "",
+        emergencyContact: staffData.emergencyContact || "",
+        education: staffData.education || "",
+        experience: staffData.experience || 0,
+        notes: staffData.notes || "",
+      } : {}),
     },
   });
 
@@ -198,6 +233,65 @@ const AddStaffMainArea: React.FC = () => {
     },
   ];
 
+  // Initialize form with staff data in edit mode
+  useEffect(() => {
+    if (mode === "edit" && staffData) {
+      // Set form values
+      const formValues: Partial<IStaffForm> = {
+        firstName: staffData.firstName,
+        lastName: staffData.lastName,
+        email: staffData.email,
+        phone: staffData.phone,
+        mobile: staffData.mobile,
+        position: staffData.position,
+        department: staffData.department,
+        company: staffData.company,
+        companyId: staffData.companyId,
+        location: staffData.location,
+        joinDate: staffData.joinDate,
+        status: staffData.status,
+        employmentType: staffData.employmentType,
+        salary: staffData.salary,
+        currency: staffData.currency,
+        supervisor: staffData.supervisor,
+        gender: staffData.gender,
+        dateOfBirth: staffData.dateOfBirth,
+        address: staffData.address,
+        city: staffData.city,
+        country: staffData.country,
+        zipCode: staffData.zipCode,
+        emergencyContact: staffData.emergencyContact,
+        education: staffData.education,
+        experience: staffData.experience,
+        notes: staffData.notes,
+      };
+
+      // Set form values
+      Object.entries(formValues).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          const formKey = key as Extract<keyof IStaffForm, string>;
+          setValue(formKey, value as any);
+        }
+      });
+
+      // Set selected skills
+      if (staffData.skills) {
+        setSelectedSkills(staffData.skills);
+        setValue("skills", staffData.skills);
+      }
+
+      // Set selected company
+      if (staffData.companyId && staffData.company) {
+        const company = companies.find(c => c.id === staffData.companyId) || 
+                      { id: staffData.companyId, name: staffData.company };
+        setSelectedCompany(company);
+      }
+
+      // Load into formData state
+      setFormData(formValues);
+    }
+  }, [mode, staffData, setValue]);
+
   const handleNextStep = async () => {
     const currentStepFields = steps[activeIndex].fields;
     const isValid = await trigger(currentStepFields as any);
@@ -222,40 +316,48 @@ const AddStaffMainArea: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    Object.entries(formData).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        const formKey = key as Extract<keyof IStaffForm, string>;
-        setValue(formKey, value as any);
+  const onSubmit = async (data: IStaffForm) => {
+    setIsSubmitting(true);
+
+    try {
+      const payload: IStaffForm = {
+        ...formData,
+        ...data,
+        skills: selectedSkills,
+        company: selectedCompany?.name || data.company || "",
+        companyId: selectedCompany?.id || data.companyId || 0,
+      };
+
+      console.log("Staff Payload:", payload);
+
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      if (mode === "add") {
+        toast.success("Staff member added successfully!");
+      } else {
+        toast.success("Staff member updated successfully!");
       }
-    });
-
-    // Load selected skills
-    if (formData.skills) {
-      setSelectedSkills(formData.skills);
+      
+      setTimeout(() => {
+        router.push("/super-admin/staff");
+      }, 500);
+    } catch (error) {
+      console.error("Error saving staff:", error);
+      toast.error(mode === "add" ? "Failed to add staff member" : "Failed to update staff member");
+    } finally {
+      setIsSubmitting(false);
     }
+  };
 
-    // Load selected company
-    if (formData.companyId && formData.company) {
-      setSelectedCompany({ id: formData.companyId, name: formData.company });
-    }
-  }, [activeIndex, formData, setValue]);
-
-  const onSubmit = (data: IStaffForm) => {
-    const payload: IStaffForm = {
-      ...formData,
-      ...data,
-      skills: selectedSkills,
-      company: selectedCompany?.name || data.company || "",
-      companyId: selectedCompany?.id || data.companyId || 0,
-    };
-
-    console.log("Staff Payload:", payload);
-    toast.success("Staff member added successfully!");
-    
-    setTimeout(() => {
+  const handleCancel = () => {
+    if (isDirty) {
+      if (confirm("You have unsaved changes. Are you sure you want to leave?")) {
+        router.push("/super-admin/staff");
+      }
+    } else {
       router.push("/super-admin/staff");
-    }, 500);
+    }
   };
 
   const renderStepContent = (index: number) => {
@@ -934,7 +1036,9 @@ const AddStaffMainArea: React.FC = () => {
 
             {/* Summary Card */}
             <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
-              <h4 className="font-medium text-blue-800 mb-4">Ready to Create Staff Record</h4>
+              <h4 className="font-medium text-blue-800 mb-4">
+                {mode === "add" ? "Ready to Create Staff Record" : "Ready to Update Staff Record"}
+              </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-blue-700 text-sm font-medium">Personal Information</p>
@@ -958,7 +1062,9 @@ const AddStaffMainArea: React.FC = () => {
                 </div>
               </div>
               <p className="text-blue-700 text-sm mb-3">
-                Review all information before submitting. You can edit any step by going back.
+                {mode === "add" 
+                  ? "Review all information before submitting. You can edit any step by going back."
+                  : "Review all changes before updating. You can edit any step by going back."}
               </p>
               <ul className="text-blue-700 text-sm space-y-2">
                 <li className="flex items-center">
@@ -1004,15 +1110,21 @@ const AddStaffMainArea: React.FC = () => {
             <li className="breadcrumb-item">
               <Link href="/super-admin/staff">Staff</Link>
             </li>
-            <li className="breadcrumb-item active">Add Staff</li>
+            <li className="breadcrumb-item active">
+              {mode === "add" ? "Add Staff" : "Edit Staff"}
+            </li>
           </ol>
         </nav>
       </div>
 
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800">Add New Staff Member</h1>
-        <p className="text-gray-600 mt-2">Fill in the staff details step by step</p>
+        <h1 className="text-2xl font-bold text-gray-800">
+          {mode === "add" ? "Add New Staff Member" : `Edit Staff Member: ${staffData?.firstName} ${staffData?.lastName}`}
+        </h1>
+        <p className="text-gray-600 mt-2">
+          {mode === "add" ? "Fill in the staff details step by step" : "Update staff information as needed"}
+        </p>
       </div>
 
       {/* Form Card */}
@@ -1027,6 +1139,11 @@ const AddStaffMainArea: React.FC = () => {
               <span className="bg-primary/10 text-primary px-3 py-1 rounded-full">
                 {Math.round(((activeIndex + 1) / steps.length) * 100)}% Complete
               </span>
+              {mode === "edit" && staffData && (
+                <span className="ml-2 bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                  ID: {staffData.employeeId || staffData.id}
+                </span>
+              )}
             </div>
           </div>
 
@@ -1092,8 +1209,9 @@ const AddStaffMainArea: React.FC = () => {
             <div className="flex justify-between items-center mt-10 pt-8 border-t border-gray-200">
               <button
                 type="button"
-                onClick={() => router.push("/super-admin/staff")}
+                onClick={handleCancel}
                 className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
@@ -1104,6 +1222,7 @@ const AddStaffMainArea: React.FC = () => {
                     type="button"
                     className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
                     onClick={handlePreviousStep}
+                    disabled={isSubmitting}
                   >
                     Previous
                   </button>
@@ -1112,22 +1231,34 @@ const AddStaffMainArea: React.FC = () => {
                 {activeIndex < steps.length - 1 ? (
                   <button
                     type="button"
-                    className="px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
                     onClick={handleNextStep}
+                    disabled={isSubmitting}
                   >
                     Next Step
                   </button>
                 ) : (
                   <button
                     type="submit"
-                    className="px-8 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="px-8 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
+                    disabled={isSubmitting}
                   >
-                    <div className="flex items-center">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      Add Staff Member
-                    </div>
+                    {isSubmitting ? (
+                      <div className="flex items-center">
+                        <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {mode === "add" ? "Adding..." : "Updating..."}
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        {mode === "add" ? "Add Staff Member" : "Update Staff Member"}
+                      </div>
+                    )}
                   </button>
                 )}
               </div>
@@ -1143,7 +1274,9 @@ const AddStaffMainArea: React.FC = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <div>
-            <h4 className="font-medium text-blue-800">Tips for adding a new staff member</h4>
+            <h4 className="font-medium text-blue-800">
+              {mode === "add" ? "Tips for adding a new staff member" : "Tips for editing staff information"}
+            </h4>
             <ul className="mt-2 text-blue-700 text-sm space-y-1">
               <li>• Use the searchable dropdowns for position, department, and company</li>
               <li>• Start typing in dropdowns to filter options quickly</li>
@@ -1151,6 +1284,9 @@ const AddStaffMainArea: React.FC = () => {
               <li>• Salary information is confidential and encrypted</li>
               <li>• Set appropriate status based on employment situation</li>
               <li>• All fields marked with * are required</li>
+              {mode === "edit" && (
+                <li>• Some fields may be disabled if they cannot be changed after creation</li>
+              )}
             </ul>
           </div>
         </div>

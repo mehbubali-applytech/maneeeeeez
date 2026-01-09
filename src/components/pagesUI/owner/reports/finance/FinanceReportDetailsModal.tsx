@@ -285,6 +285,7 @@ const FinanceReportDetailsModal = ({
                 <Button
                   variant="contained"
                   color="primary"
+                  className="!text-white"
                   startIcon={<DownloadIcon />}
                   onClick={handleDownload}
                 >
@@ -309,6 +310,7 @@ const FinanceReportDetailsModal = ({
                 {reportData.status === "Complete" && reportData.totalAmount > 0 && (
                   <Button
                     variant="contained"
+                  className="!text-white"
                     color="success"
                     startIcon={<AttachMoneyIcon />}
                     onClick={() => alert("Exporting to accounting system...")}

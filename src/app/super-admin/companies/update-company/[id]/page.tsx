@@ -9,7 +9,7 @@ const CompanyDetailPage = () => {
     <>
       <MetaData pageTitle="Add Company">
         <Wrapper role="super-admin">
-          <AddEditCompanyMainArea mode="add" companyData={null} />
+          <AddEditCompanyMainArea mode="edit" companyData={null} />
         </Wrapper>
       </MetaData>
     </>

@@ -7,9 +7,10 @@ import { useForm, Controller } from "react-hook-form";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
-import { IComplianceOfficerForm } from "../compliance-officers.interface";
+import { IComplianceOfficerForm, IComplianceOfficer } from "../compliance-officers.interface";
 import InputField from "@/components/elements/SharedInputs/InputField";
 
+// Mock data
 const qualificationOptions = [
   "JD (Juris Doctor)",
   "LLM in Corporate Law",
@@ -107,15 +108,27 @@ const roles = [
   "Compliance Consultant"
 ];
 
+const genderOptions = ["Male", "Female", "Other"];
+const maritalStatusOptions = ["Single", "Married", "Divorced", "Widowed"];
+const statusOptions = ["Active", "Inactive", "On Leave", "Pending"];
 
-const AddNewComplianceOfficer: React.FC = () => {
+interface AddEditComplianceOfficerMainAreaProps {
+  mode?: "add" | "edit";
+  complianceOfficerData?: IComplianceOfficer | null;
+}
+
+const AddEditComplianceOfficerMainArea: React.FC<AddEditComplianceOfficerMainAreaProps> = ({
+  mode = "add",
+  complianceOfficerData = null,
+}) => {
   const router = useRouter();
-  const [status, setStatus] = useState<"Active" | "Inactive" | "On Leave" | "Pending">("Active");
   const [activeIndex, setActiveIndex] = useState<number>(0);
-  const [formData, setFormData] = useState<Partial<IComplianceOfficerForm>>({});
+  const [status, setStatus] = useState<"Active" | "Inactive" | "On Leave" | "Pending">("Active");
   const [selectedQualifications, setSelectedQualifications] = useState<string[]>([]);
   const [selectedCertifications, setSelectedCertifications] = useState<string[]>([]);
   const [selectedSpecializations, setSelectedSpecializations] = useState<string[]>([]);
+  const [formData, setFormData] = useState<Partial<IComplianceOfficerForm>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
@@ -125,7 +138,8 @@ const AddNewComplianceOfficer: React.FC = () => {
     setValue,
     trigger,
     getValues,
-    formState: { errors },
+    reset,
+    formState: { errors, isDirty },
   } = useForm<IComplianceOfficerForm>({
     defaultValues: {
       complianceScore: 0,
@@ -135,45 +149,104 @@ const AddNewComplianceOfficer: React.FC = () => {
       certifications: [],
       specializations: [],
       role: "Compliance Officer",
-    }
+      status: "Active",
+      gender: undefined,
+      maritalStatus: undefined,
+    },
   });
 
-const steps = [
-  {
-    label: "Basic Information",
-    fields: ['officerName', 'officerCode', 'email', 'phone', 'mobile', 'jobTitle', 'role']
-  },
-  {
-    label: "Company & Location",
-    fields: ['company', 'department', 'location', 'reportingTo', 'hireDate'] // Removed 'region'
-  },
-  {
-    label: "Professional Details",
-    fields: ['yearsOfExperience', 'managedAudits', 'qualifications', 'certifications', 'specializations', 'complianceScore']
-  },
-  {
-    label: "Additional Information",
-    fields: ['dateOfBirth', 'gender', 'maritalStatus', 'address', 'emergencyContact']
-  },
-  {
-    label: "Review & Status",
-    fields: []
-  },
-];
- const handleNextStep = async () => {
-  const currentStepFields = steps[activeIndex].fields;
-  console.log('Validating fields:', currentStepFields);
-  
-  const isValid = await trigger(currentStepFields as any);
-  console.log('Is valid?', isValid);
-  
-  // Log individual field validation
-  for (const field of currentStepFields) {
-    const result = await trigger(field as any);
-    console.log(`${field}: ${result ? 'valid' : 'invalid'}`);
-  }
-  
-  if (isValid) {
+  const steps = [
+    {
+      label: "Basic Information",
+      fields: ['officerName', 'officerCode', 'email', 'phone', 'mobile', 'jobTitle', 'role']
+    },
+    {
+      label: "Company & Location",
+      fields: ['company', 'department', 'location', 'reportingTo', 'hireDate']
+    },
+    {
+      label: "Professional Details",
+      fields: ['yearsOfExperience', 'managedAudits', 'qualifications', 'certifications', 'specializations', 'complianceScore']
+    },
+    {
+      label: "Additional Information",
+      fields: ['dateOfBirth', 'gender', 'maritalStatus', 'address', 'emergencyContact']
+    },
+    {
+      label: "Review & Status",
+      fields: []
+    },
+  ];
+
+  // Load compliance officer data in edit mode
+  useEffect(() => {
+    if (mode === "edit" && complianceOfficerData) {
+      // Transform compliance officer data to form data
+      const formValues: Partial<IComplianceOfficerForm> = {
+        officerName: complianceOfficerData.officerName,
+        officerCode: complianceOfficerData.officerCode,
+        email: complianceOfficerData.email,
+        phone: complianceOfficerData.phone,
+        mobile: complianceOfficerData.mobile || "",
+        jobTitle: complianceOfficerData.jobTitle,
+        role: complianceOfficerData.role,
+        company: complianceOfficerData.company,
+        department: complianceOfficerData.department,
+        location: complianceOfficerData.location,
+        reportingTo: complianceOfficerData.reportingTo || "",
+        hireDate: complianceOfficerData.hireDate,
+        tag: complianceOfficerData.tag || "",
+        yearsOfExperience: complianceOfficerData.yearsOfExperience || 0,
+        managedAudits: complianceOfficerData.managedAudits || 0,
+        complianceScore: complianceOfficerData.complianceScore || 0,
+        dateOfBirth: complianceOfficerData.dateOfBirth || "",
+        gender: complianceOfficerData.gender || undefined,
+        maritalStatus: complianceOfficerData.maritalStatus || undefined,
+        address: complianceOfficerData.address || "",
+        emergencyContact: complianceOfficerData.emergencyContact || "",
+        emergencyPhone: complianceOfficerData.emergencyPhone || "",
+        notes: complianceOfficerData.notes || "",
+        extension: complianceOfficerData.extension || "",
+        status: complianceOfficerData.status,
+      };
+
+      // Set form values
+      Object.entries(formValues).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          const formKey = key as Extract<keyof IComplianceOfficerForm, string>;
+          setValue(formKey, value as any);
+        }
+      });
+
+      // Set selected arrays
+      if (complianceOfficerData.qualifications) {
+        setSelectedQualifications(complianceOfficerData.qualifications);
+        setValue("qualifications", complianceOfficerData.qualifications);
+      }
+
+      if (complianceOfficerData.certifications) {
+        setSelectedCertifications(complianceOfficerData.certifications);
+        setValue("certifications", complianceOfficerData.certifications);
+      }
+
+      if (complianceOfficerData.specializations) {
+        setSelectedSpecializations(complianceOfficerData.specializations);
+        setValue("specializations", complianceOfficerData.specializations);
+      }
+
+      // Set status
+      setStatus(complianceOfficerData.status);
+
+      // Load into formData state
+      setFormData(formValues);
+    }
+  }, [mode, complianceOfficerData, setValue]);
+
+  const handleNextStep = async () => {
+    const currentStepFields = steps[activeIndex].fields;
+    const isValid = await trigger(currentStepFields as any);
+
+    if (isValid) {
       const currentValues = getValues();
       setFormData(prev => ({ ...prev, ...currentValues }));
 
@@ -193,50 +266,73 @@ const steps = [
     }
   };
 
-  useEffect(() => {
-    Object.entries(formData).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        const formKey = key as Extract<keyof IComplianceOfficerForm, string>;
-        setValue(formKey, value as any);
+  const onSubmit = async (data: IComplianceOfficerForm) => {
+    setIsSubmitting(true);
+
+    try {
+      const payload: IComplianceOfficerForm = {
+        ...formData,
+        ...data,
+        qualifications: selectedQualifications,
+        certifications: selectedCertifications,
+        specializations: selectedSpecializations,
+        status: status,
+        complianceScore: data.complianceScore || formData.complianceScore || 0,
+      };
+
+      // Add mode-specific data
+      if (mode === "add") {
+        (payload as any).id = Date.now();
+        (payload as any).createdAt = new Date().toISOString();
+        (payload as any).updatedAt = new Date().toISOString();
+      } else if (mode === "edit" && complianceOfficerData) {
+        (payload as any).id = complianceOfficerData.id;
+        (payload as any).createdAt = complianceOfficerData.createdAt;
+        (payload as any).updatedAt = new Date().toISOString();
       }
-    });
-  }, [activeIndex, formData, setValue]);
 
-  const onSubmit = (data: IComplianceOfficerForm) => {
-    const payload = {
-      ...formData,
-      ...data,
-      qualifications: selectedQualifications,
-      certifications: selectedCertifications,
-      specializations: selectedSpecializations,
-      status: status,
-      complianceScore: data.complianceScore || formData.complianceScore || 0,
-      id: Date.now(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      console.log("Compliance Officer Payload:", payload);
 
-    console.log("Compliance Officer Payload:", payload);
-    toast.success("Compliance Officer added successfully!");
-    setTimeout(() => {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      toast.success(mode === "add" ? "Compliance Officer added successfully!" : "Compliance Officer updated successfully!");
+
+      setTimeout(() => {
+        router.push("/super-admin/compliance-officers");
+      }, 500);
+    } catch (error) {
+      console.error(`Error ${mode === "add" ? "adding" : "updating"} compliance officer:`, error);
+      toast.error(mode === "add" ? "Failed to add compliance officer" : "Failed to update compliance officer");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancel = () => {
+    if (isDirty) {
+      if (confirm("You have unsaved changes. Are you sure you want to leave?")) {
+        router.push("/super-admin/compliance-officers");
+      }
+    } else {
       router.push("/super-admin/compliance-officers");
-    }, 500);
+    }
   };
 
   const handleQualificationDelete = (qualificationToDelete: string) => {
-    setSelectedQualifications(qualifications => 
+    setSelectedQualifications(qualifications =>
       qualifications.filter(qualification => qualification !== qualificationToDelete)
     );
   };
 
   const handleCertificationDelete = (certificationToDelete: string) => {
-    setSelectedCertifications(certifications => 
+    setSelectedCertifications(certifications =>
       certifications.filter(certification => certification !== certificationToDelete)
     );
   };
 
   const handleSpecializationDelete = (specializationToDelete: string) => {
-    setSelectedSpecializations(specializations => 
+    setSelectedSpecializations(specializations =>
       specializations.filter(specialization => specialization !== specializationToDelete)
     );
   };
@@ -246,6 +342,7 @@ const steps = [
       case 0:
         return (
           <div className="grid grid-cols-12 gap-6">
+            {/* Officer Name */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="officerName"
@@ -258,23 +355,30 @@ const steps = [
               />
             </div>
 
+            {/* Officer Code */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="officerCode"
                 label="Officer Code"
                 required
-                defaultValue={"CO-"}
+                defaultValue={mode === "add" ? "CO-" : watch("officerCode")}
                 register={register("officerCode", {
                   required: "Officer Code is required",
                   pattern: {
                     value: /^CO-\d{3,4}$/,
-                    message: "Officer Code format: CO-001, CO-1234"
-                  }
+                    message: "Officer Code format: CO-001, CO-1234",
+                  },
+                  disabled: mode === "edit",
                 })}
                 error={errors.officerCode}
               />
+
+              {mode === "edit" && (
+                <p className="text-gray-500 text-xs mt-1">Officer Code cannot be changed after creation</p>
+              )}
             </div>
 
+            {/* Email */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="email"
@@ -292,6 +396,7 @@ const steps = [
               />
             </div>
 
+            {/* Phone */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="phone"
@@ -309,6 +414,7 @@ const steps = [
               />
             </div>
 
+            {/* Mobile */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="mobile"
@@ -318,6 +424,7 @@ const steps = [
               />
             </div>
 
+            {/* Job Title */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="jobTitle"
@@ -330,6 +437,7 @@ const steps = [
               />
             </div>
 
+            {/* Role */}
             <div className="col-span-12 lg:col-span-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Role <span className="text-red-500">*</span>
@@ -363,6 +471,7 @@ const steps = [
               />
             </div>
 
+            {/* Extension */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="extension"
@@ -376,6 +485,7 @@ const steps = [
       case 1:
         return (
           <div className="grid grid-cols-12 gap-6">
+            {/* Company */}
             <div className="col-span-12 lg:col-span-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Company <span className="text-red-500">*</span>
@@ -409,6 +519,7 @@ const steps = [
               />
             </div>
 
+            {/* Department */}
             <div className="col-span-12 lg:col-span-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Department <span className="text-red-500">*</span>
@@ -442,6 +553,7 @@ const steps = [
               />
             </div>
 
+            {/* Location */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="location"
@@ -454,8 +566,7 @@ const steps = [
               />
             </div>
 
-
-
+            {/* Reporting To */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="reportingTo"
@@ -464,6 +575,7 @@ const steps = [
               />
             </div>
 
+            {/* Hire Date */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="hireDate"
@@ -477,6 +589,7 @@ const steps = [
               />
             </div>
 
+            {/* Tag */}
             <div className="col-span-12 lg:col-span-6">
               <div className="mb-4">
                 <label htmlFor="tag" className="block text-sm font-medium text-gray-700 mb-1">
@@ -496,6 +609,7 @@ const steps = [
       case 2:
         return (
           <div className="grid grid-cols-12 gap-6">
+            {/* Years of Experience */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="yearsOfExperience"
@@ -512,6 +626,7 @@ const steps = [
               />
             </div>
 
+            {/* Audits Managed */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="managedAudits"
@@ -525,6 +640,7 @@ const steps = [
               />
             </div>
 
+            {/* Compliance Score */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="complianceScore"
@@ -539,6 +655,7 @@ const steps = [
               />
             </div>
 
+            {/* Qualifications */}
             <div className="col-span-12">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Qualifications
@@ -563,6 +680,8 @@ const steps = [
                           {...getTagProps({ index })}
                           onDelete={() => handleQualificationDelete(option)}
                           key={index}
+                          size="small"
+                          className="m-1"
                         />
                       ))
                     }
@@ -580,6 +699,7 @@ const steps = [
               />
             </div>
 
+            {/* Certifications */}
             <div className="col-span-12">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Certifications
@@ -604,6 +724,8 @@ const steps = [
                           {...getTagProps({ index })}
                           onDelete={() => handleCertificationDelete(option)}
                           key={index}
+                          size="small"
+                          className="m-1"
                         />
                       ))
                     }
@@ -621,6 +743,7 @@ const steps = [
               />
             </div>
 
+            {/* Specializations */}
             <div className="col-span-12">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Specializations
@@ -641,10 +764,12 @@ const steps = [
                     renderTags={(value, getTagProps) =>
                       value.map((option, index) => (
                         <Chip
-                        label={option}
-                        {...getTagProps({ index })}
-                        onDelete={() => handleSpecializationDelete(option)}
-                        key={index}
+                          label={option}
+                          {...getTagProps({ index })}
+                          onDelete={() => handleSpecializationDelete(option)}
+                          key={index}
+                          size="small"
+                          className="m-1"
                         />
                       ))
                     }
@@ -667,6 +792,7 @@ const steps = [
       case 3:
         return (
           <div className="grid grid-cols-12 gap-6">
+            {/* Date of Birth */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="dateOfBirth"
@@ -676,37 +802,67 @@ const steps = [
               />
             </div>
 
+            {/* Gender */}
             <div className="col-span-12 lg:col-span-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Gender
               </label>
-              <select
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors bg-white"
-                {...register("gender")}
-              >
-                <option value="">Select Gender</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
-              </select>
+              <Controller
+                name="gender"
+                control={control}
+                render={({ field }) => (
+                  <Autocomplete
+                    options={genderOptions}
+                    value={field.value || null}
+                    onChange={(_, newValue) => {
+                      field.onChange(newValue || "");
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        variant="outlined"
+                        size="small"
+                        placeholder="Select gender"
+                        className="w-full"
+                      />
+                    )}
+                    className="w-full"
+                  />
+                )}
+              />
             </div>
 
+            {/* Marital Status */}
             <div className="col-span-12 lg:col-span-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Marital Status
               </label>
-              <select
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors bg-white"
-                {...register("maritalStatus")}
-              >
-                <option value="">Select Marital Status</option>
-                <option value="Single">Single</option>
-                <option value="Married">Married</option>
-                <option value="Divorced">Divorced</option>
-                <option value="Widowed">Widowed</option>
-              </select>
+              <Controller
+                name="maritalStatus"
+                control={control}
+                render={({ field }) => (
+                  <Autocomplete
+                    options={maritalStatusOptions}
+                    value={field.value || null}
+                    onChange={(_, newValue) => {
+                      field.onChange(newValue || "");
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        variant="outlined"
+                        size="small"
+                        placeholder="Select marital status"
+                        className="w-full"
+                      />
+                    )}
+                    className="w-full"
+                  />
+                )}
+              />
             </div>
 
+            {/* Address */}
             <div className="col-span-12">
               <div className="mb-4">
                 <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
@@ -721,6 +877,7 @@ const steps = [
               </div>
             </div>
 
+            {/* Emergency Contact */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="emergencyContact"
@@ -729,6 +886,7 @@ const steps = [
               />
             </div>
 
+            {/* Emergency Phone */}
             <div className="col-span-12 lg:col-span-6">
               <InputField
                 id="emergencyPhone"
@@ -738,6 +896,7 @@ const steps = [
               />
             </div>
 
+            {/* Notes */}
             <div className="col-span-12">
               <div className="mb-4">
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
@@ -757,58 +916,64 @@ const steps = [
       case 4:
         return (
           <div className="space-y-6">
+            {/* Status Selection */}
             <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium text-gray-800">Compliance Officer Status</h4>
                   <p className="text-gray-600 text-sm mt-1">
-                    {status === "Active"
-                      ? "This compliance officer will be active and can perform compliance functions"
-                      : status === "On Leave"
-                        ? "This compliance officer will be on leave and temporarily inactive"
-                        : status === "Pending"
-                          ? "This compliance officer will be pending review and activation"
-                          : "This compliance officer will be inactive and cannot perform compliance functions"}
+                    Set the current status of this compliance officer
                   </p>
                 </div>
                 <div className="flex items-center space-x-4">
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as "Active" | "Inactive" | "On Leave" | "Pending")}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="On Leave">On Leave</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+                  <Controller
+                    name="status"
+                    control={control}
+                    render={({ field }) => (
+                      <select
+                        value={status}
+                        onChange={(e) => {
+                          const newStatus = e.target.value as "Active" | "Inactive" | "On Leave" | "Pending";
+                          setStatus(newStatus);
+                          field.onChange(newStatus);
+                        }}
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
+                      >
+                        {statusOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  />
                 </div>
               </div>
 
               <div className={`mt-4 px-4 py-3 rounded-md ${status === "Active"
-                ? "bg-green-50 border border-green-200"
-                : status === "On Leave"
-                  ? "bg-yellow-50 border border-yellow-200"
-                  : status === "Pending"
-                    ? "bg-blue-50 border border-blue-200"
-                    : "bg-gray-100 border border-gray-200"
+                  ? "bg-green-50 border border-green-200"
+                  : status === "On Leave"
+                    ? "bg-yellow-50 border border-yellow-200"
+                    : status === "Pending"
+                      ? "bg-blue-50 border border-blue-200"
+                      : "bg-gray-100 border border-gray-200"
                 }`}>
                 <div className="flex items-center">
                   <div className={`w-3 h-3 rounded-full mr-3 ${status === "Active"
-                    ? "bg-green-500"
-                    : status === "On Leave"
-                      ? "bg-yellow-500"
-                      : status === "Pending"
-                        ? "bg-blue-500"
-                        : "bg-gray-400"
+                      ? "bg-green-500"
+                      : status === "On Leave"
+                        ? "bg-yellow-500"
+                        : status === "Pending"
+                          ? "bg-blue-500"
+                          : "bg-gray-400"
                     }`}></div>
                   <span className={`text-sm ${status === "Active"
-                    ? "text-green-700"
-                    : status === "On Leave"
-                      ? "text-yellow-700"
-                      : status === "Pending"
-                        ? "text-blue-700"
-                        : "text-gray-600"
+                      ? "text-green-700"
+                      : status === "On Leave"
+                        ? "text-yellow-700"
+                        : status === "Pending"
+                          ? "text-blue-700"
+                          : "text-gray-600"
                     }`}>
                     {status === "Active"
                       ? '✓ Compliance officer is active and can perform all compliance functions.'
@@ -822,10 +987,78 @@ const steps = [
               </div>
             </div>
 
+            {/* Summary Card */}
             <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
-              <h4 className="font-medium text-blue-800 mb-4">Ready to Create Compliance Officer</h4>
+              <h4 className="font-medium text-blue-800 mb-4">
+                {mode === "add" ? "Ready to Create Compliance Officer" : "Ready to Update Compliance Officer"}
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-blue-700 text-sm font-medium">Basic Information</p>
+                  <p className="text-blue-600 text-sm">
+                    {watch("officerName")}
+                    <br />
+                    {watch("officerCode")}
+                    <br />
+                    {watch("email")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-blue-700 text-sm font-medium">Professional Details</p>
+                  <p className="text-blue-600 text-sm">
+                    {watch("company")}
+                    <br />
+                    {watch("department")}
+                    <br />
+                    {watch("role")}
+                    <br />
+                    {watch("yearsOfExperience")} years experience
+                  </p>
+                </div>
+              </div>
+
+              {/* Qualifications Summary */}
+              {selectedQualifications.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-blue-700 text-sm font-medium">Qualifications</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {selectedQualifications.slice(0, 3).map((qual, index) => (
+                      <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                        {qual}
+                      </span>
+                    ))}
+                    {selectedQualifications.length > 3 && (
+                      <span className="px-2 py-1 bg-blue-200 text-blue-800 rounded text-xs">
+                        +{selectedQualifications.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Certifications Summary */}
+              {selectedCertifications.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-blue-700 text-sm font-medium">Certifications</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {selectedCertifications.slice(0, 3).map((cert, index) => (
+                      <span key={index} className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
+                        {cert}
+                      </span>
+                    ))}
+                    {selectedCertifications.length > 3 && (
+                      <span className="px-2 py-1 bg-green-200 text-green-800 rounded text-xs">
+                        +{selectedCertifications.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <p className="text-blue-700 text-sm mb-3">
-                Review all information before submitting. You can edit any step by going back.
+                {mode === "add"
+                  ? "Review all information before submitting. You can edit any step by going back."
+                  : "Review all changes before updating. You can edit any step by going back."}
               </p>
               <ul className="text-blue-700 text-sm space-y-2">
                 <li className="flex items-center">
@@ -858,6 +1091,7 @@ const steps = [
 
   return (
     <div className="app__slide-wrapper">
+      {/* Breadcrumb */}
       <div className="breadcrumb__wrapper mb-[25px]">
         <nav>
           <ol className="breadcrumb flex items-center mb-0">
@@ -870,17 +1104,31 @@ const steps = [
             <li className="breadcrumb-item">
               <Link href="/super-admin/compliance-officers">Compliance Officers</Link>
             </li>
-            <li className="breadcrumb-item active">Add Compliance Officer</li>
+            <li className="breadcrumb-item active">
+              {mode === "add" ? "Add Compliance Officer" : `Edit Compliance Officer`}
+            </li>
           </ol>
         </nav>
       </div>
 
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800">Add New Compliance Officer</h1>
-        <p className="text-gray-600 mt-2">Fill in the compliance officer details step by step</p>
+        <h1 className="text-2xl font-bold text-gray-800">
+          {mode === "add" ? "Add New Compliance Officer" : `Edit Compliance Officer`}
+        </h1>
+        <p className="text-gray-600 mt-2">
+          {mode === "add" ? "Fill in the compliance officer details step by step" : "Update compliance officer information"}
+          {mode === "edit" && complianceOfficerData && (
+            <span className="ml-2 text-sm bg-gray-100 px-2 py-1 rounded">
+              ID: {complianceOfficerData.officerCode}
+            </span>
+          )}
+        </p>
       </div>
 
+      {/* Form Card */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Stepper */}
         <div className="p-10">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-700">
@@ -890,6 +1138,16 @@ const steps = [
               <span className="bg-primary/10 text-primary px-3 py-1 rounded-full">
                 {Math.round(((activeIndex + 1) / steps.length) * 100)}% Complete
               </span>
+              {mode === "edit" && complianceOfficerData && (
+                <span className={`ml-2 px-2 py-1 rounded text-xs ${complianceOfficerData.status === "Active"
+                    ? "bg-green-100 text-green-800"
+                    : complianceOfficerData.status === "Inactive"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }`}>
+                  {complianceOfficerData.status}
+                </span>
+              )}
             </div>
           </div>
 
@@ -899,8 +1157,8 @@ const steps = [
                 <div className="flex flex-col items-center">
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${index <= activeIndex
-                      ? "bg-primary text-white"
-                      : "bg-gray-200 text-gray-500"
+                        ? "bg-primary text-white"
+                        : "bg-gray-200 text-gray-500"
                       }`}
                   >
                     {index + 1}
@@ -943,15 +1201,18 @@ const steps = [
           </div>
         </div>
 
+        {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="p-8">
             {renderStepContent(activeIndex)}
 
+            {/* Navigation Buttons */}
             <div className="flex justify-between items-center mt-10 pt-8 border-t border-gray-200">
               <button
                 type="button"
-                onClick={() => router.push("/super-admin/compliance-officers")}
+                onClick={handleCancel}
                 className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
@@ -962,6 +1223,7 @@ const steps = [
                     type="button"
                     className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
                     onClick={handlePreviousStep}
+                    disabled={isSubmitting}
                   >
                     Previous
                   </button>
@@ -970,22 +1232,34 @@ const steps = [
                 {activeIndex < steps.length - 1 ? (
                   <button
                     type="button"
-                    className="px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
                     onClick={handleNextStep}
+                    disabled={isSubmitting}
                   >
                     Next Step
                   </button>
                 ) : (
                   <button
                     type="submit"
-                    className="px-8 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="px-8 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
+                    disabled={isSubmitting}
                   >
-                    <div className="flex items-center">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      Create Compliance Officer
-                    </div>
+                    {isSubmitting ? (
+                      <div className="flex items-center">
+                        <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {mode === "add" ? "Creating..." : "Updating..."}
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        {mode === "add" ? "Create Compliance Officer" : "Update Compliance Officer"}
+                      </div>
+                    )}
                   </button>
                 )}
               </div>
@@ -994,20 +1268,25 @@ const steps = [
         </form>
       </div>
 
+      {/* Tips */}
       <div className="mt-8 p-6 bg-blue-50 rounded-xl border border-blue-200">
         <div className="flex items-start">
           <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <div>
-            <h4 className="font-medium text-blue-800">Tips for adding a new compliance officer</h4>
+            <h4 className="font-medium text-blue-800">
+              {mode === "add" ? "Tips for adding a new compliance officer" : "Tips for editing compliance officer"}
+            </h4>
             <ul className="mt-2 text-blue-700 text-sm space-y-1">
               <li>• Ensure all required certifications are listed for regulatory compliance</li>
               <li>• Verify compliance score based on previous performance or assessments</li>
               <li>• Include all relevant specializations for accurate role assignment</li>
               <li>• Set appropriate access levels based on compliance responsibilities</li>
               <li>• All fields marked with * are required for audit trail</li>
-              <li>• Include region information for geographical compliance responsibilities</li>
+              {mode === "edit" && (
+                <li>• Officer Code cannot be changed after creation</li>
+              )}
             </ul>
           </div>
         </div>
@@ -1016,4 +1295,4 @@ const steps = [
   );
 };
 
-export default AddNewComplianceOfficer;
+export default AddEditComplianceOfficerMainArea;

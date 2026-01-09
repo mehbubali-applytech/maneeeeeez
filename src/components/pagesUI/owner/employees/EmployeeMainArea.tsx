@@ -27,7 +27,7 @@ const EmployeeMainArea: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>("All");
   
  useEffect(() => {
-  setEmployees(createMockEmployees(4));
+  setEmployees(createMockEmployees(5));
 }, []);
 
   const handleAddEmployee = () => {

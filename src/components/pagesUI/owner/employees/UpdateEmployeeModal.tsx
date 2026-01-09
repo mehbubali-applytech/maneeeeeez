@@ -2,6 +2,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
+
 import {
   Box,
   Stepper,
@@ -73,6 +75,14 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const pathname = usePathname();
+
+  const baseEmployeesRoute = React.useMemo(() => {
+  if (pathname.startsWith("/super-admin")) {
+    return "/super-admin/employees";
+  }
+  return "/owner/employees";
+}, [pathname]);
 
   const methods = useForm<IEmployeeForm>({
     defaultValues: {
@@ -208,7 +218,7 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
 
       // Navigate to employee list
       setTimeout(() => {
-        router.push('/owner/employees');
+        router.push(baseEmployeesRoute);
       }, 1000);
 
     } catch (error) {
@@ -238,7 +248,8 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
     if (isDirty) {
       setShowExitConfirm(true);
     } else {
-      router.push('/owner/employees');
+      router.push(baseEmployeesRoute);
+
     }
   };
 
@@ -304,6 +315,9 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
               </li>
               <li className="breadcrumb-item">
                 <Link href="/owner">Owner</Link>
+              </li>
+              <li className="breadcrumb-item">
+                <Link href={baseEmployeesRoute}>Employees</Link>
               </li>
               <li className="breadcrumb-item active">
                 {mode === 'add' ? 'Add New Employee' : 'Edit Employee'}
@@ -553,7 +567,8 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
             onClick={async () => {
               await handleSaveDraft();
               setShowExitConfirm(false);
-              router.push('/owner/employees');
+              router.push(baseEmployeesRoute);
+
             }}
             color="primary"
           >
@@ -562,7 +577,7 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
           <Button
             onClick={() => {
               setShowExitConfirm(false);
-              router.push('/owner/employees');
+              router.push(baseEmployeesRoute);
             }}
             color="error"
           >

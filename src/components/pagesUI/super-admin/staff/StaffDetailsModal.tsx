@@ -442,6 +442,7 @@ const StaffDetailsModal = ({
                 <Button
                   variant="contained"
                   color="primary"
+                  className="!text-white"
                   startIcon={<EditIcon />}
                   onClick={() => alert(`Editing ${staffData.fullName}...`)}
                 >
@@ -466,6 +467,7 @@ const StaffDetailsModal = ({
                 <Button
                   variant="contained"
                   color="success"
+                  className="!text-white"
                   startIcon={<VerifiedIcon />}
                   onClick={() => alert("Viewing attendance records...")}
                 >

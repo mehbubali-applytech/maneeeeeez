@@ -34,6 +34,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import WorkIcon from "@mui/icons-material/Work";
 import { IHrManager } from "./hr-managers.interface";
 import { DownloadButtonGroup, TableData } from "@/app/helpers/downloader";
+import { useRouter } from "next/navigation";
 
 // Mock data - Ensure this is properly structured
 const allHrManagersData: IHrManager[] = [
@@ -217,6 +218,7 @@ const HrManagersTable: React.FC<HrManagersTableProps> = ({
   const [selectedHrManager, setSelectedHrManager] = useState<IHrManager | null>(null);
   const [modalDeleteOpen, setModalDeleteOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number>(0);
+  const router = useRouter();
   
   // State for table controls
   const [selected, setSelected] = useState<number[]>([]);
@@ -896,12 +898,7 @@ const HrManagersTable: React.FC<HrManagersTableProps> = ({
                                   <button
                                     type="button"
                                     className="table__icon edit p-1.5 hover:bg-green-100 rounded"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (onEdit) {
-                                        onEdit(row);
-                                      }
-                                    }}
+                                    onClick={()=>router.push(`/super-admin/hr-manager/update-hr-manager/${row.id}`)}
                                     title="Edit HR Manager"
                                   >
                                     <EditIcon fontSize="small" className="text-green-600" />
