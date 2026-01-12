@@ -26,46 +26,43 @@ import { visuallyHidden } from "@mui/utils";
 import {
   Description,
   Edit,
-  Preview,
-  ContentCopy,
   Delete,
-  Publish,
-  Download,
-  MoreVert
+  Visibility,
+  ContentCopy,
+  ToggleOn,
+  ToggleOff,
+  Star,
+  StarBorder
 } from "@mui/icons-material";
 import { IOfferLetterTemplate } from "./OfferLetterTypes";
 import DeleteModal from "@/components/common/DeleteModal";
 import { DownloadButtonGroup, TableData } from "@/app/helpers/downloader";
 
-interface OfferLetterTemplatesTableProps {
+interface TemplateTableProps {
   data: IOfferLetterTemplate[];
   onEdit: (template: IOfferLetterTemplate) => void;
   onDelete: (id: string) => void;
   onPreview: (template: IOfferLetterTemplate) => void;
   onDuplicate: (template: IOfferLetterTemplate) => void;
-  onStatusChange: (id: string, status: 'Active' | 'Inactive') => void;
-  onPublish: (id: string) => void;
+  onStatusChange: (id: string, status: boolean) => void;
 }
 
-// Table head cells
 const templateHeadCells = [
   { id: "name", label: "Template Name" },
-  { id: "code", label: "Code" },
   { id: "category", label: "Category" },
   { id: "department", label: "Department" },
-  { id: "versions", label: "Versions" },
-  { id: "status", label: "Status" },
+  { id: "variables", label: "Variables" },
   { id: "usage", label: "Usage" },
+  { id: "status", label: "Status" },
 ];
 
-const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
+const TemplateTable: React.FC<TemplateTableProps> = ({
   data,
   onEdit,
   onDelete,
   onPreview,
   onDuplicate,
-  onStatusChange,
-  onPublish
+  onStatusChange
 }) => {
   const [selected, setSelected] = useState<string[]>([]);
   const [modalDeleteOpen, setModalDeleteOpen] = useState(false);
@@ -111,22 +108,26 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
     const searchLower = searchQuery.toLowerCase();
     return (
       template.name.toLowerCase().includes(searchLower) ||
-      template.code.toLowerCase().includes(searchLower) ||
       template.description?.toLowerCase().includes(searchLower) ||
-      template.department?.toLowerCase().includes(searchLower) ||
-      template.tags.some(tag => tag.toLowerCase().includes(searchLower))
+      template.category.toLowerCase().includes(searchLower) ||
+      template.department?.toLowerCase().includes(searchLower)
     );
   });
 
   // Sort data
   const sortedData = [...filteredData].sort((a, b) => {
-    if (orderBy === "name" || orderBy === "code" || orderBy === "category" || orderBy === "department") {
-      const valueA = (a[orderBy as keyof IOfferLetterTemplate] || '').toString().toLowerCase();
-      const valueB = (b[orderBy as keyof IOfferLetterTemplate] || '').toString().toLowerCase();
+    if (orderBy === "name") {
+      const valueA = a.name.toLowerCase();
+      const valueB = b.name.toLowerCase();
       return order === "asc" ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
     }
     if (orderBy === "usage") {
-      return order === "asc" ? a.usageCount - b.usageCount : b.usageCount - a.usageCount;
+      return order === "asc" ? a.usedCount - b.usedCount : b.usedCount - a.usedCount;
+    }
+    if (orderBy === "category") {
+      const valueA = a.category.toLowerCase();
+      const valueB = b.category.toLowerCase();
+      return order === "asc" ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
     }
     return 0;
   });
@@ -163,52 +164,35 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
     setSelected(selected.filter(item => item !== id));
   };
 
-  const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'Published': return 'success';
-      case 'Draft': return 'warning';
-      case 'Archived': return 'default';
-      default: return 'default';
-    }
-  };
-
   const getCategoryColor = (category: string) => {
     switch(category) {
-      case 'Full-time': return 'primary';
-      case 'Intern': return 'info';
-      case 'Contract': return 'secondary';
-      case 'Consultant': return 'success';
+      case 'Standard': return 'primary';
+      case 'Executive': return 'warning';
+      case 'Contractor': return 'info';
+      case 'Intern': return 'success';
       default: return 'default';
     }
   };
 
   // Prepare table data for export
   const exportData = useMemo((): TableData => {
-    const headers = [...templateHeadCells.map(cell => cell.label), 'Last Used', 'Variables'];
+    const headers = templateHeadCells.map(cell => cell.label);
     
     const rows = sortedData.map(template => {
-      const variables = template.versions[0]?.variables?.map(v => v.name).join(", ") || 'None';
-      const lastUsed = template.lastUsedAt 
-        ? new Date(template.lastUsedAt).toLocaleDateString()
-        : 'Never';
-      
       return [
         template.name,
-        template.code,
         template.category,
         template.department || 'All',
-        template.versions.length.toString(),
-        template.status,
-        template.usageCount.toString(),
-        lastUsed,
-        variables
+        template.variables.join(', '),
+        template.usedCount.toString(),
+        template.isActive ? "Active" : "Inactive"
       ];
     });
     
     return {
       headers,
       rows,
-      title: `Offer Letter Templates Export - ${sortedData.length} records`
+      title: `Template Export - ${sortedData.length} records`
     };
   }, [sortedData]);
 
@@ -220,7 +204,6 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
             
             {/* Top Controls Row */}
             <Grid container spacing={2} alignItems="center" className="mb-4">
-              {/* Search Bar */}
               <Grid item xs={12} md={6}>
                 <Box className="flex items-center gap-4">
                   <Typography variant="body2" className="whitespace-nowrap">
@@ -239,15 +222,14 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
                 </Box>
               </Grid>
               
-              {/* Export Options */}
               <Grid item xs={12} md={6}>
                 <Box className="flex justify-end">
                   <DownloadButtonGroup
                     data={exportData}
                     options={{
-                      fileName: `offer_templates_${new Date().toISOString().split('T')[0]}`,
+                      fileName: `templates_${new Date().toISOString().split('T')[0]}`,
                       includeHeaders: true,
-                      pdfTitle: `Offer Letter Templates Report`
+                      pdfTitle: `Template Report - ${new Date().toLocaleDateString()}`
                     }}
                     variant="outlined"
                     size="small"
@@ -299,20 +281,19 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
                     
                     <TableBody className="table__body">
                       {paginatedRows.map((template) => {
-                        const isSelected = selected.includes(template.id);
-                        const latestVersion = template.versions[0];
+                        const categoryColor = getCategoryColor(template.category);
                         
                         return (
                           <TableRow
                             key={template.id}
                             hover
-                            selected={isSelected}
+                            selected={selected.includes(template.id)}
                             onClick={() => handleClick(template.id)}
                           >
                             <TableCell padding="checkbox">
                               <Checkbox
                                 className="custom-checkbox checkbox-small"
-                                checked={isSelected}
+                                checked={selected.includes(template.id)}
                                 onChange={() => handleClick(template.id)}
                                 size="small"
                               />
@@ -333,158 +314,111 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
                             </TableCell>
                             
                             <TableCell>
-                              <code className="font-mono bg-gray-100 px-2 py-1 rounded text-sm">
-                                {template.code}
-                              </code>
-                            </TableCell>
-                            
-                            <TableCell>
                               <Chip
                                 label={template.category}
                                 size="small"
-                                color={getCategoryColor(template.category) as any}
+                                color={categoryColor as any}
                                 variant="outlined"
                               />
                             </TableCell>
                             
                             <TableCell>
-                              {template.department ? (
-                                <Chip
-                                  label={template.department}
-                                  size="small"
-                                  variant="outlined"
-                                />
-                              ) : (
-                                <span className="text-gray-400">All</span>
-                              )}
+                              <span className="font-medium">{template.department || 'All'}</span>
                             </TableCell>
                             
                             <TableCell>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">v{latestVersion.version}</span>
-                                {template.versions.length > 1 && (
-                                  <Tooltip title={`${template.versions.length - 1} older versions`}>
-                                    <Chip
-                                      label={`+${template.versions.length - 1}`}
-                                      size="small"
-                                      variant="outlined"
-                                    />
-                                  </Tooltip>
+                              <div className="flex flex-wrap gap-1">
+                                {template.variables.slice(0, 3).map((variable, idx) => (
+                                  <span key={idx} className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                    {variable}
+                                  </span>
+                                ))}
+                                {template.variables.length > 3 && (
+                                  <span className="text-xs text-gray-500">
+                                    +{template.variables.length - 3} more
+                                  </span>
                                 )}
                               </div>
                             </TableCell>
                             
                             <TableCell>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Chip
-                                  label={template.status}
-                                  size="small"
-                                  color={getStatusColor(template.status) as any}
-                                />
-                                {!template.isActive && (
-                                  <Chip
-                                    label="Inactive"
-                                    size="small"
-                                    color="default"
-                                    variant="outlined"
-                                  />
-                                )}
-                              </Box>
+                              <div className="font-medium">
+                                {template.usedCount} uses
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                Last updated: {new Date(template.updatedAt).toLocaleDateString()}
+                              </div>
                             </TableCell>
                             
                             <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{template.usageCount}</span>
-                                <span className="text-xs text-gray-500">
-                                  {template.lastUsedAt 
-                                    ? `Last: ${new Date(template.lastUsedAt).toLocaleDateString()}`
-                                    : 'Never used'
-                                  }
+                              <div className="flex items-center gap-2">
+                                <Tooltip title={template.isActive ? "Deactivate" : "Activate"}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onStatusChange(template.id, !template.isActive);
+                                    }}
+                                  >
+                                    {template.isActive ? (
+                                      <ToggleOn color="success" />
+                                    ) : (
+                                      <ToggleOff color="disabled" />
+                                    )}
+                                  </IconButton>
+                                </Tooltip>
+                                <span className={`bd-badge ${template.isActive ? 'bg-success' : 'bg-danger'}`}>
+                                  {template.isActive ? "Active" : "Inactive"}
                                 </span>
                               </div>
                             </TableCell>
                             
                             <TableCell className="table__icon-box">
                               <div className="flex items-center justify-start gap-[10px]">
-                                <Tooltip title="Preview">
-                                  <button
-                                    type="button"
-                                    className="table__icon edit"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onPreview(template);
-                                    }}
-                                  >
-                                    <Preview fontSize="small" />
-                                  </button>
-                                </Tooltip>
-                                
-                                <Tooltip title="Edit">
-                                  <button
-                                    type="button"
-                                    className="table__icon edit"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onEdit(template);
-                                    }}
-                                  >
-                                    <Edit fontSize="small" />
-                                  </button>
-                                </Tooltip>
-                                
-                                <Tooltip title="Download">
-                                  <button
-                                    type="button"
-                                    className="table__icon download"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      // Download logic here
-                                    }}
-                                  >
-                                    <Download fontSize="small" />
-                                  </button>
-                                </Tooltip>
-                                
-                                {template.status === 'Draft' && (
-                                  <Tooltip title="Publish">
-                                    <button
-                                      type="button"
-                                      className="table__icon edit"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onPublish(template.id);
-                                      }}
-                                    >
-                                      <Publish fontSize="small" />
-                                    </button>
-                                  </Tooltip>
-                                )}
-                                
-                                <Tooltip title="Duplicate">
-                                  <button
-                                    type="button"
-                                    className="table__icon edit"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onDuplicate(template);
-                                    }}
-                                  >
-                                    <ContentCopy fontSize="small" />
-                                  </button>
-                                </Tooltip>
-                                
-                                <Tooltip title="Delete">
-                                  <button
-                                    className="removeBtn table__icon delete"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeleteId(template.id);
-                                      setModalDeleteOpen(true);
-                                    }}
-                                  >
-                                    <Delete fontSize="small" />
-                                  </button>
-                                </Tooltip>
+                                <button
+                                  type="button"
+                                  className="table__icon edit"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEdit(template);
+                                  }}
+                                  title="Edit Template"
+                                >
+                                  <i className="fa-regular fa-pen-to-square"></i>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table__icon download"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onPreview(template);
+                                  }}
+                                  title="Preview Template"
+                                >
+                                  <i className="fa-regular fa-eye"></i>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table__icon edit"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDuplicate(template);
+                                  }}
+                                  title="Duplicate Template"
+                                >
+                                  <ContentCopy fontSize="small" />
+                                </button>
+                                <button
+                                  className="removeBtn table__icon delete"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteId(template.id);
+                                    setModalDeleteOpen(true);
+                                  }}
+                                  title="Delete Template"
+                                >
+                                  <i className="fa-regular fa-trash"></i>
+                                </button>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -512,15 +446,15 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
                       </div>
                     </div>
                     <div className="text-center">
-                      <div className="text-sm text-gray-600">Published</div>
-                      <div className="text-xl font-semibold text-blue-600">
-                        {sortedData.filter(t => t.status === 'Published').length}
+                      <div className="text-sm text-gray-600">Total Uses</div>
+                      <div className="text-xl font-semibold">
+                        {sortedData.reduce((sum, t) => sum + t.usedCount, 0)}
                       </div>
                     </div>
                     <div className="text-center">
-                      <div className="text-sm text-gray-600">Total Usage</div>
+                      <div className="text-sm text-gray-600">Most Used</div>
                       <div className="text-xl font-semibold">
-                        {sortedData.reduce((sum, t) => sum + t.usageCount, 0)}
+                        {sortedData.reduce((max, t) => t.usedCount > max.usedCount ? t : max, sortedData[0])?.name}
                       </div>
                     </div>
                   </div>
@@ -531,7 +465,6 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
             {/* Bottom Controls Row */}
             {sortedData.length > 0 && (
               <Grid container spacing={2} alignItems="center" className="mt-4">
-                {/* Number of Entries Dropdown */}
                 <Grid item xs={12} md={3}>
                   <Box className="flex items-center gap-2">
                     <Typography variant="body2" className="whitespace-nowrap">
@@ -556,7 +489,6 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
                   </Box>
                 </Grid>
                 
-                {/* Showing Entries Info */}
                 <Grid item xs={12} md={6}>
                   <Box className="flex flex-col items-center">
                     <Typography variant="body2">
@@ -573,7 +505,6 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
                   </Box>
                 </Grid>
                 
-                {/* Pagination */}
                 <Grid item xs={12} md={3}>
                   <Box className="flex justify-end">
                     <Pagination
@@ -606,18 +537,17 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
                   type="button"
                   className="px-3 py-1.5 bg-primary-500 text-white rounded-md hover:bg-primary-600 flex items-center gap-1 text-sm"
                   onClick={() => {
-                    selected.forEach(id => onStatusChange(id, 'Active'));
-                    setSelected([]);
+                    const selectedTemplates = data.filter(template => selected.includes(template.id));
+                    console.log('Bulk action on templates:', selectedTemplates);
                   }}
                 >
-                  <i className="fa-solid fa-toggle-on mr-1"></i>
-                  Activate Selected
+                  <ToggleOn fontSize="small" />
+                  Toggle Status
                 </button>
                 <button
                   type="button"
                   className="px-3 py-1.5 bg-gray-600 text-white rounded-md hover:bg-gray-700 flex items-center gap-1 text-sm"
                   onClick={() => {
-                    // Bulk export logic
                     console.log('Bulk export templates:', selected);
                   }}
                 >
@@ -654,16 +584,8 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
             <p className="text-gray-500 mb-4">
               {searchQuery 
                 ? `No templates found matching "${searchQuery}"`
-                : "Create your first offer letter template to get started"}
+                : "Create your first template to get started"}
             </p>
-            <button
-              className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600"
-              onClick={() => {
-                // Navigate to create template
-              }}
-            >
-              Create New Template
-            </button>
           </div>
         </div>
       )}
@@ -679,4 +601,4 @@ const OfferLetterTemplatesTable: React.FC<OfferLetterTemplatesTableProps> = ({
   );
 };
 
-export default OfferLetterTemplatesTable;
+export default TemplateTable;

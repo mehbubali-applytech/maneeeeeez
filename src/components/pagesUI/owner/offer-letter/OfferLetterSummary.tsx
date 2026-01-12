@@ -2,71 +2,79 @@
 
 import React from "react";
 import SummarySingleCard from "@/components/common/SummarySingleCard";
-import { IOfferLetterTemplate } from "./OfferLetterTypes";
+import { IOfferLetter } from "./OfferLetterTypes";
 
 interface OfferLetterSummaryProps {
-  templates: IOfferLetterTemplate[];
+  offers: IOfferLetter[];
 }
 
-const OfferLetterSummary: React.FC<OfferLetterSummaryProps> = ({ templates }) => {
-  const totalTemplates = templates.length;
-  const activeTemplates = templates.filter(t => t.isActive).length;
-  const totalVersions = templates.reduce((sum, template) => sum + template.versions.length, 0);
-  const draftTemplates = templates.filter(t => t.status === 'Draft').length;
-  const publishedTemplates = templates.filter(t => t.status === 'Published').length;
-  const usageCount = templates.reduce((sum, t) => sum + t.usageCount, 0);
+const OfferLetterSummary: React.FC<OfferLetterSummaryProps> = ({ offers }) => {
+  const totalOffers = offers.length;
+  const sentOffers = offers.filter(offer => offer.offerStatus === 'Sent').length;
+  const acceptedOffers = offers.filter(offer => offer.offerStatus === 'Accepted').length;
+  const draftOffers = offers.filter(offer => offer.offerStatus === 'Draft').length;
+  
+  // Calculate average CTC
+  const avgCTC = offers.length > 0 
+    ? offers.reduce((sum, offer) => sum + offer.ctc, 0) / offers.length 
+    : 0;
+  
+  // Calculate acceptance rate
+  const acceptanceRate = sentOffers > 0 
+    ? Math.round((acceptedOffers / sentOffers) * 100) 
+    : 0;
 
   const summaryData = [
     {
       iconClass: "fa-light fa-file-contract",
-      title: "Total Templates",
-      value: totalTemplates.toString(),
-      description: `${activeTemplates} active`,
-      percentageChange: "+8%",
+      title: "Total Offers",
+      value: totalOffers.toString(),
+      description: "",
+      percentageChange: "+15%",
       isIncrease: true,
       color: "primary"
     },
     {
+      iconClass: "fa-light fa-paper-plane",
+      title: "Sent Offers",
+      value: sentOffers.toString(),
+      description: "",
+      percentageChange: "+8%",
+      isIncrease: true,
+      color: "info"
+    },
+    {
       iconClass: "fa-light fa-check-circle",
-      title: "Published",
-      value: publishedTemplates.toString(),
-      description: `${draftTemplates} in draft`,
+      title: "Accepted",
+      value: acceptedOffers.toString(),
+      description: `${acceptanceRate}% acceptance rate`,
       percentageChange: "+12%",
       isIncrease: true,
       color: "success"
     },
     {
-      iconClass: "fa-light fa-layer-group",
-      title: "Total Versions",
-      value: totalVersions.toString(),
-      description: "Across all templates",
-      percentageChange: "+5%",
-      isIncrease: true,
-      color: "info"
-    },
-    {
-      iconClass: "fa-light fa-chart-line",
-      title: "Times Used",
-      value: usageCount.toString(),
-      description: "Offer letters generated",
-      percentageChange: "+25%",
-      isIncrease: true,
+      iconClass: "fa-light fa-edit",
+      title: "Drafts",
+      value: draftOffers.toString(),
+      description: "Pending send",
+      percentageChange: "-3%",
+      isIncrease: false,
       color: "warning"
     },
     {
-      iconClass: "fa-light fa-building",
-      title: "Departments",
-      value: "5",
-      description: "With templates",
-      percentageChange: "+2",
+      iconClass: "fa-light fa-money-bill-wave",
+      title: "Avg. CTC",
+      value: `₹${(avgCTC / 100000).toFixed(1)}L`,
+      description: "Average package",
+      percentageChange: "+10%",
       isIncrease: true,
       color: "secondary"
     },
     {
       iconClass: "fa-light fa-clock",
-      title: "Latest Update",
-      value: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
-      description: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+      title: "Pending Response",
+      value: sentOffers.toString(),
+      description: "Awaiting candidate",
       percentageChange: "",
       isIncrease: false,
       color: "default"
@@ -78,13 +86,7 @@ const OfferLetterSummary: React.FC<OfferLetterSummaryProps> = ({ templates }) =>
       {summaryData.map((item, index) => (
         <div
           key={index}
-          className={`
-            col-span-12 
-            sm:col-span-6 
-            ${index === 0 || index === 5 ? 'lg:col-span-4' : 'lg:col-span-4'}
-            xl:col-span-3
-            2xl:col-span-2
-          `}
+          className="col-span-12 sm:col-span-6 xxl:col-span-4"
         >
           <SummarySingleCard {...item} />
         </div>
