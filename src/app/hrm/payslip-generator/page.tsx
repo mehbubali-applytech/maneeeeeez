@@ -1,14 +1,14 @@
 import Wrapper from "@/components/layouts/DefaultWrapper";
-import HRAttendanceMainArea from "@/components/pagesUI/hrm/employee-attendance/HRAttendanceMainArea";
+import SalarySlipMainArea from "@/components/pagesUI/hrm/payslip-generator/SalarySlipMainArea";
 import MetaData from "@/hooks/useMetaData";
 import React from "react";
 
 const page = () => {
   return (
     <>
-      <MetaData pageTitle="Employee Attendance">
+      <MetaData pageTitle="Leave Management">
         <Wrapper>
-          <HRAttendanceMainArea />
+          <SalarySlipMainArea/>
         </Wrapper>
       </MetaData>
     </>

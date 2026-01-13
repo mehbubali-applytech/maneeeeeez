@@ -25,7 +25,7 @@ const sidebarData: SidebarCategory[] = [
           { label: "Biometric Attendance", link: "/hrm/biometric-attendance" },
         ],
       },
-         {
+      {
         id: 4,
         label: "Salary Structure",
         icon: "icon-hrm",
@@ -48,13 +48,19 @@ const sidebarData: SidebarCategory[] = [
         label: "Leaves",
         icon: "icon-hrm",
         subItems: [
+          { label: "Leave request", link: "/hrm/leaves-request" },
           { label: "Employee leaves", link: "/hrm/leaves-employee" },
           { label: "Admin leaves", link: "/hrm/leaves" },
 
         ],
       },
-          {
-        id: 7,
+      {
+        id:7,
+        label:"Payslip Generator",
+        link:"/hrm/payslip-generator"
+      },
+      {
+        id: 8,
         label: "Misl",
         icon: "icon-hrm",
         subItems: [

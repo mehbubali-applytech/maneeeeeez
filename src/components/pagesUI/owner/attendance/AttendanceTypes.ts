@@ -1,4 +1,3 @@
-// AttendanceTypes.ts
 export interface IAttendanceRecord {
   id: string;
   employeeId: string;
@@ -29,6 +28,9 @@ export interface IAttendanceRecord {
     notes?: string;
   };
   isManualEntry: boolean;
+  manualOverrideReason?: string;
+  overriddenBy?: string;
+  overriddenAt?: string;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
@@ -46,11 +48,13 @@ export interface IAttendanceCorrectionRequest {
   requestedCheckOut?: string;
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
+  type: 'Missing In' | 'Missing Out' | 'Incorrect Time' | 'Absent';
   submittedAt: string;
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNotes?: string;
   supportingDocuments?: string[];
+  attachmentUrl?: string;
 }
 
 export interface IAttendanceSummary {
@@ -85,6 +89,13 @@ export const SHIFTS = [
   { id: 2, name: 'Evening Shift', startTime: '14:00', endTime: '22:00' },
   { id: 3, name: 'Night Shift', startTime: '21:00', endTime: '06:00' },
   { id: 4, name: 'Flexi Shift', startTime: '10:00', endTime: '19:00' }
+];
+
+export const CORRECTION_TYPES = [
+  { value: 'Missing In', label: 'Missing Check-In' },
+  { value: 'Missing Out', label: 'Missing Check-Out' },
+  { value: 'Incorrect Time', label: 'Incorrect Time' },
+  { value: 'Absent', label: 'Marked Absent' }
 ];
 
 // Helper functions
@@ -141,3 +152,14 @@ export const determineAttendanceStatus = (
   // Only check-in or only check-out
   return 'Half-Day';
 };
+
+export interface IHRManualEditData {
+  attendanceId: string;
+  date: string;
+  employeeName: string;
+  checkInTime: string;
+  checkOutTime: string;
+  overrideReason: string;
+  changedBy: string;
+  changedAt: string;
+}

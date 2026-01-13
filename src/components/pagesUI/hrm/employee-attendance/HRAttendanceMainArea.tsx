@@ -13,7 +13,12 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  Chip
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField
 } from "@mui/material";
 import {
   AccessTime,
@@ -24,17 +29,22 @@ import {
   MoreVert,
   Refresh,
   FilterList,
+  People,
+  CheckCircle,
+  Warning,
+  Dashboard
 } from "@mui/icons-material";
 import Link from "next/link";
 
 import SummarySingleCard from "@/components/common/SummarySingleCard";
 
-import LiveAttendanceMonitor from "./LiveAttendanceMonitor";
-import AttendanceLogs from "./AttendanceLogs";
-import AttendanceRequests from "./AttendanceRequests";
+import LiveAttendanceMonitor from "../../owner/attendance/LiveAttendanceMonitor";
+import AttendanceLogs from "../../owner/attendance/AttendanceLogs";
 import EmployeeAttendanceTable from "./EmployeeAttendanceTable";
-import ManualCorrectionModal from "./ManualCorrectionModal";
-import { IAttendanceRecord, IAttendanceCorrectionRequest } from "./AttendanceTypes";
+import HRManualEditModal from "./HRManualEditModal";
+import HRAttendanceRequestsList from "./HRAttendanceRequestsList";
+import { IAttendanceRecord, IAttendanceCorrectionRequest } from "../../owner/attendance/AttendanceTypes";
+import HREmployeeAttendanceTable from "./HREmployeeAttendanceTable";
 
 const generateTodayAttendance = (): IAttendanceRecord[] => {
   const today = new Date().toISOString().split('T')[0];
@@ -97,7 +107,10 @@ const generateTodayAttendance = (): IAttendanceRecord[] => {
       checkInLocation: "Mumbai Office",
       totalHours: 9,
       attendanceStatus: "Present",
-      isManualEntry: false,
+      isManualEntry: true,
+      manualOverrideReason: "Forgot to check-in, HR corrected",
+      overriddenBy: "HR Manager",
+      overriddenAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     },
@@ -130,15 +143,15 @@ const generateCorrectionRequests = (): IAttendanceCorrectionRequest[] => {
       employeeId: "EMP001",
       employeeName: "Rajesh Kumar",
       date: "2024-01-15",
+      type: "Incorrect Time",
       currentCheckIn: "09:45",
       currentCheckOut: "18:00",
       requestedCheckIn: "09:00",
       requestedCheckOut: "18:00",
       reason: "Forgot to check-in on time due to meeting",
       status: "Pending",
-      type: "Incorrect Time", 
       submittedAt: "2024-01-15T10:30:00Z",
-      supportingDocuments: ["meeting_invite.pdf"]
+      attachmentUrl: "/attachments/meeting_invite.pdf"
     },
     {
       id: "REQ002",
@@ -146,34 +159,45 @@ const generateCorrectionRequests = (): IAttendanceCorrectionRequest[] => {
       employeeId: "EMP002",
       employeeName: "Priya Sharma",
       date: "2024-01-14",
-      currentCheckIn: "14:30",
+      type: "Missing In",
+      currentCheckIn: undefined,
       currentCheckOut: "22:00",
       requestedCheckIn: "14:00",
       requestedCheckOut: "22:00",
-      reason: "Late check-in due to client call",
+      reason: "System error - check-in not recorded",
       status: "Approved",
-      type: "Incorrect Time", 
       submittedAt: "2024-01-14T15:00:00Z",
-      reviewedBy: "HR001",
+      reviewedBy: "HR Manager",
       reviewedAt: "2024-01-14T16:30:00Z",
       reviewNotes: "Approved with note to maintain punctuality"
     }
   ];
 };
 
-const EmployeeAttendanceMainArea: React.FC = () => {
+const HRAttendanceMainArea: React.FC = () => {
   // State for tabs
   const [activeTab, setActiveTab] = useState(0);
   
   // State for modals
-  const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
+  const [hrEditModalOpen, setHrEditModalOpen] = useState(false);
+  const [bulkActionDialogOpen, setBulkActionDialogOpen] = useState(false);
   
   // State for data
   const [todayAttendance, setTodayAttendance] = useState<IAttendanceRecord[]>(generateTodayAttendance());
   const [correctionRequests, setCorrectionRequests] = useState<IAttendanceCorrectionRequest[]>(generateCorrectionRequests());
   
+  // State for selected record
+  const [selectedRecord, setSelectedRecord] = useState<IAttendanceRecord | null>(null);
+  
+  // State for bulk actions
+  const [bulkActionType, setBulkActionType] = useState<'approve' | 'reject'>('approve');
+  const [bulkActionReason, setBulkActionReason] = useState('');
+  
   // State for filters
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  
+  // Current HR user
+  const currentHRUser = "HR Manager";
   
   // Tab configuration
   const tabs = [
@@ -186,8 +210,8 @@ const EmployeeAttendanceMainArea: React.FC = () => {
           setTodayAttendance(generateTodayAttendance());
         }}
         onEditAttendance={(record) => {
-          console.log("Edit attendance:", record);
-          // Open edit modal
+          setSelectedRecord(record);
+          setHrEditModalOpen(true);
         }}
         onViewDetails={(record) => {
           console.log("View details:", record);
@@ -198,7 +222,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
     {
       label: "Monthly View",
       icon: <CalendarMonth />,
-      component: <EmployeeAttendanceTable />
+      component: <HREmployeeAttendanceTable />
     },
     {
       label: "Attendance Logs",
@@ -213,8 +237,8 @@ const EmployeeAttendanceMainArea: React.FC = () => {
           // Export logic
         }}
         onEditRecord={(record) => {
-          console.log("Edit record:", record);
-          // Open edit modal
+          setSelectedRecord(record);
+          setHrEditModalOpen(true);
         }}
         onViewCorrection={(record) => {
           console.log("View correction:", record);
@@ -225,19 +249,34 @@ const EmployeeAttendanceMainArea: React.FC = () => {
     {
       label: "Correction Requests",
       icon: <Edit />,
-      component: <AttendanceRequests 
+      component: <HRAttendanceRequestsList 
         requests={correctionRequests}
-        onApprove={(requestId) => {
-          console.log("Approve request:", requestId);
+        onApprove={(requestIds) => {
+          console.log("Approve requests:", requestIds);
           setCorrectionRequests(prev => 
-            prev.map(req => req.id === requestId ? { ...req, status: 'Approved' } : req)
+            prev.map(req => requestIds.includes(req.id) ? { 
+              ...req, 
+              status: 'Approved',
+              reviewedBy: currentHRUser,
+              reviewedAt: new Date().toISOString()
+            } : req)
           );
         }}
-        onReject={(requestId) => {
-          console.log("Reject request:", requestId);
+        onReject={(requestIds, reason) => {
+          console.log("Reject requests:", requestIds, "with reason:", reason);
           setCorrectionRequests(prev => 
-            prev.map(req => req.id === requestId ? { ...req, status: 'Rejected' } : req)
+            prev.map(req => requestIds.includes(req.id) ? { 
+              ...req, 
+              status: 'Rejected',
+              reviewedBy: currentHRUser,
+              reviewedAt: new Date().toISOString(),
+              reviewNotes: reason
+            } : req)
           );
+        }}
+        onEditRequest={(request) => {
+          console.log("Edit request:", request);
+          // Open edit modal
         }}
         onViewDetails={(request) => {
           console.log("View request details:", request);
@@ -245,6 +284,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
         onExport={(data) => {
           console.log("Export requests:", data.length, "requests");
         }}
+        currentUser={currentHRUser}
       />
     }
   ];
@@ -258,6 +298,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
     const checkedIn = todayAttendance.filter(r => r.checkInTime).length;
     const checkedOut = todayAttendance.filter(r => r.checkOutTime).length;
     const pendingRequests = correctionRequests.filter(r => r.status === 'Pending').length;
+    const manualEntries = todayAttendance.filter(r => r.isManualEntry).length;
     
     return {
       totalEmployees,
@@ -267,6 +308,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
       checkedIn,
       checkedOut,
       pendingRequests,
+      manualEntries,
       attendanceRate: Math.round((present / totalEmployees) * 100)
     };
   }, [todayAttendance, correctionRequests]);
@@ -279,7 +321,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
       value: `${attendanceStats.attendanceRate}%`,
       description: "Today",
       percentageChange: "",
-      isIncrease: attendanceStats.attendanceRate > 85, // Assuming >85% is good
+      isIncrease: attendanceStats.attendanceRate > 85,
     },
     {
       iconClass: "fa-light fa-users",
@@ -314,16 +356,10 @@ const EmployeeAttendanceMainArea: React.FC = () => {
       isIncrease: attendanceStats.pendingRequests > 0,
     },
     {
-      iconClass: "fa-light fa-calendar-day",
-      title: "Today&apos;s Date",
-      value: new Date().toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: '2-digit' 
-      }),
-      description: new Date().toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric' 
-      }),
+      iconClass: "fa-light fa-user-edit",
+      title: "Manual Entries",
+      value: attendanceStats.manualEntries.toString(),
+      description: "HR corrected",
       percentageChange: "",
       isIncrease: true,
     }
@@ -341,8 +377,8 @@ const EmployeeAttendanceMainArea: React.FC = () => {
     setAnchorEl(null);
   };
 
-  const handleManualCorrection = () => {
-    setCorrectionModalOpen(true);
+  const handleManualEdit = () => {
+    setHrEditModalOpen(true);
     handleMenuClose();
   };
 
@@ -357,11 +393,87 @@ const EmployeeAttendanceMainArea: React.FC = () => {
     handleMenuClose();
   };
 
-  const handleSubmitCorrection = (data: any) => {
-    console.log("Submit correction:", data);
-    setCorrectionModalOpen(false);
-    // In real app, would update state or make API call
-    alert("Correction request submitted successfully!");
+  const handleHREditSubmit = (data: any) => {
+    console.log("HR manual edit:", data);
+    
+    // Update the attendance record
+    setTodayAttendance(prev => 
+      prev.map(record => 
+        record.id === data.attendanceId ? {
+          ...record,
+          checkInTime: data.checkInTime,
+          checkOutTime: data.checkOutTime,
+          totalHours: calculateTotalHours(data.checkInTime, data.checkOutTime),
+          attendanceStatus: 'Present', // Assuming manual edits mark as present
+          isManualEntry: true,
+          manualOverrideReason: data.overrideReason,
+          overriddenBy: data.changedBy,
+          overriddenAt: data.changedAt,
+          updatedAt: new Date().toISOString()
+        } : record
+      )
+    );
+    
+    setHrEditModalOpen(false);
+    alert("Attendance record updated successfully!");
+  };
+
+  const handleBulkApprove = () => {
+    // Filter pending requests
+    const pendingIds = correctionRequests
+      .filter(req => req.status === 'Pending')
+      .map(req => req.id);
+    
+    if (pendingIds.length > 0) {
+      setCorrectionRequests(prev => 
+        prev.map(req => pendingIds.includes(req.id) ? { 
+          ...req, 
+          status: 'Approved',
+          reviewedBy: currentHRUser,
+          reviewedAt: new Date().toISOString(),
+          reviewNotes: "Bulk approved by HR"
+        } : req)
+      );
+      alert(`${pendingIds.length} requests bulk approved`);
+    } else {
+      alert("No pending requests to approve");
+    }
+    setBulkActionDialogOpen(false);
+  };
+
+  const handleBulkReject = () => {
+    if (!bulkActionReason.trim()) {
+      alert("Please provide a reason for rejection");
+      return;
+    }
+
+    const pendingIds = correctionRequests
+      .filter(req => req.status === 'Pending')
+      .map(req => req.id);
+    
+    if (pendingIds.length > 0) {
+      setCorrectionRequests(prev => 
+        prev.map(req => pendingIds.includes(req.id) ? { 
+          ...req, 
+          status: 'Rejected',
+          reviewedBy: currentHRUser,
+          reviewedAt: new Date().toISOString(),
+          reviewNotes: bulkActionReason
+        } : req)
+      );
+      alert(`${pendingIds.length} requests bulk rejected`);
+      setBulkActionReason('');
+    } else {
+      alert("No pending requests to reject");
+    }
+    setBulkActionDialogOpen(false);
+  };
+
+  const calculateTotalHours = (checkIn: string, checkOut: string): number => {
+    const start = new Date(`2000-01-01T${checkIn}`);
+    const end = new Date(`2000-01-01T${checkOut}`);
+    const diffMs = end.getTime() - start.getTime();
+    return diffMs / (1000 * 60 * 60);
   };
 
   return (
@@ -373,9 +485,9 @@ const EmployeeAttendanceMainArea: React.FC = () => {
               <Link href="/">Home</Link>
             </li>
             <li className="breadcrumb-item">
-              <Link href="/owner">Owner</Link>
+              <Link href="/hr">HR Panel</Link>
             </li>
-            <li className="breadcrumb-item active">Salary Structure</li>
+            <li className="breadcrumb-item active">Attendance Management</li>
           </ol>
         </nav>
 
@@ -386,17 +498,31 @@ const EmployeeAttendanceMainArea: React.FC = () => {
             onClick={handleExportAll}
             size="small"
           >
-            Export All
+            Export Reports
           </Button>
           
           <Button
             variant="contained"
             startIcon={<Edit />}
-            onClick={handleManualCorrection}
+            onClick={handleManualEdit}
             size="small"
             className="!text-white"
           >
-            Manual Correction
+            Manual Edit
+          </Button>
+          
+          <Button
+            variant="contained"
+            color="warning"
+            startIcon={<CheckCircle />}
+            className="!text-white"
+            onClick={() => {
+              setBulkActionType('approve');
+              setBulkActionDialogOpen(true);
+            }}
+            size="small"
+          >
+            Bulk Approve
           </Button>
           
           <IconButton
@@ -419,9 +545,25 @@ const EmployeeAttendanceMainArea: React.FC = () => {
               <Download fontSize="small" sx={{ mr: 1 }} />
               Export Reports
             </MenuItem>
-            <MenuItem onClick={handleManualCorrection}>
+            <MenuItem onClick={handleManualEdit}>
               <Edit fontSize="small" sx={{ mr: 1 }} />
-              Manual Entry
+              Manual Edit Attendance
+            </MenuItem>
+            <MenuItem onClick={() => {
+              setBulkActionType('approve');
+              setBulkActionDialogOpen(true);
+              handleMenuClose();
+            }}>
+              <CheckCircle fontSize="small" sx={{ mr: 1 }} color="success" />
+              Bulk Approve Requests
+            </MenuItem>
+            <MenuItem onClick={() => {
+              setBulkActionType('reject');
+              setBulkActionDialogOpen(true);
+              handleMenuClose();
+            }}>
+              <Warning fontSize="small" sx={{ mr: 1 }} color="error" />
+              Bulk Reject Requests
             </MenuItem>
           </Menu>
         </div>
@@ -444,11 +586,18 @@ const EmployeeAttendanceMainArea: React.FC = () => {
           </Box>
           <Box>
             <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
-              Attendance Management
+              HR Attendance Management
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              Monitor, manage, and correct employee attendance in real-time
+              Monitor, manage, and correct employee attendance with administrative privileges
             </Typography>
+            <Chip 
+              label={`Logged in as: ${currentHRUser}`} 
+              size="small" 
+              color="primary" 
+              variant="outlined"
+              sx={{ mt: 1 }}
+            />
           </Box>
         </Box>
       </Box>
@@ -461,14 +610,12 @@ const EmployeeAttendanceMainArea: React.FC = () => {
             className={`
               col-span-12 
               sm:col-span-6 
-              ${index === 0 || index === 5 ? 'lg:col-span-4' : 'lg:col-span-4'}
+              lg:col-span-4
               xl:col-span-3
               2xl:col-span-2
             `}
           >
-            {/* <div className="card card__border border border-solid border-[#ECECEE] dark:border-[#2A2C31] bg-white dark:bg-[#1A1C23] rounded-[10px] p-[25px] transition-all duration-300 hover:shadow-md hover:border-primary/20 dark:hover:border-primary/30"> */}
-              <SummarySingleCard {...item} />
-            {/* </div> */}
+            <SummarySingleCard {...item} />
           </div>
         ))}
       </div>
@@ -493,7 +640,15 @@ const EmployeeAttendanceMainArea: React.FC = () => {
       {attendanceStats.pendingRequests > 0 && (
         <Alert severity="info" sx={{ mb: 3 }}>
           <Typography variant="body2">
-            <strong>{attendanceStats.pendingRequests} correction request(s) pending review.</strong> Please review and take action.
+            <strong>{attendanceStats.pendingRequests} correction request(s) pending review.</strong> Use bulk actions to approve/reject multiple requests.
+          </Typography>
+        </Alert>
+      )}
+      
+      {attendanceStats.manualEntries > 0 && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          <Typography variant="body2">
+            <strong>{attendanceStats.manualEntries} record(s) manually corrected.</strong> All manual edits are logged for audit purposes.
           </Typography>
         </Alert>
       )}
@@ -523,7 +678,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
                   <Typography variant="subtitle2">{tab.label}</Typography>
                   {index === 0 && (
                     <Typography variant="caption" color="text.secondary">
-                      Real-time updates
+                      Real-time monitoring
                     </Typography>
                   )}
                   {index === 1 && (
@@ -533,7 +688,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
                   )}
                   {index === 2 && (
                     <Typography variant="caption" color="text.secondary">
-                      Historical records
+                      Historical records & audit
                     </Typography>
                   )}
                   {index === 3 && (
@@ -558,16 +713,42 @@ const EmployeeAttendanceMainArea: React.FC = () => {
       {/* Quick Actions Footer */}
       <Paper sx={{ p: 2, borderRadius: 2 }}>
         <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-          Quick Actions
+          HR Quick Actions
         </Typography>
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           <Button
             variant="outlined"
             startIcon={<Edit />}
-            onClick={handleManualCorrection}
+            onClick={handleManualEdit}
             size="small"
           >
             Manual Attendance Entry
+          </Button>
+          
+          <Button
+            variant="outlined"
+            color="success"
+            startIcon={<CheckCircle />}
+            onClick={() => {
+              setBulkActionType('approve');
+              setBulkActionDialogOpen(true);
+            }}
+            size="small"
+          >
+            Bulk Approve Requests
+          </Button>
+          
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<Warning />}
+            onClick={() => {
+              setBulkActionType('reject');
+              setBulkActionDialogOpen(true);
+            }}
+            size="small"
+          >
+            Bulk Reject Requests
           </Button>
           
           <Button
@@ -587,19 +768,10 @@ const EmployeeAttendanceMainArea: React.FC = () => {
           >
             Advanced Filters
           </Button>
-          
-          <Button
-            variant="outlined"
-            startIcon={<Refresh />}
-            onClick={handleRefreshAll}
-            size="small"
-          >
-            Refresh All Data
-          </Button>
         </Box>
       </Paper>
 
-      {/* Tips Section */}
+      {/* HR Tips Section */}
       <Paper sx={{ p: 3, mt: 3, bgcolor: 'info.50', borderColor: 'info.light' }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
           <Box sx={{ 
@@ -616,37 +788,37 @@ const EmployeeAttendanceMainArea: React.FC = () => {
           </Box>
           <Box>
             <Typography variant="h6" sx={{ color: 'info.dark', fontWeight: 600 }}>
-              Attendance Management Tips
+              HR Attendance Management Guidelines
             </Typography>
             <Box component="ul" sx={{ pl: 2, m: 0, color: 'info.700' }}>
               <li>
                 <Typography variant="body2">
-                  <strong>Real-time Monitoring:</strong> Use the Live Monitor tab to track {`today's`} attendance in real-time
+                  <strong>Manual Corrections:</strong> Always provide detailed reasons for manual overrides
                 </Typography>
               </li>
               <li>
                 <Typography variant="body2">
-                  <strong>Monthly Reports:</strong> Generate monthly reports for payroll and compliance purposes
+                  <strong>Audit Trail:</strong> All manual edits create audit log entries
                 </Typography>
               </li>
               <li>
                 <Typography variant="body2">
-                  <strong>Correction Requests:</strong> Review and approve correction requests within 24 hours
+                  <strong>Bulk Actions:</strong> Use bulk approve/reject for efficient request processing
                 </Typography>
               </li>
               <li>
                 <Typography variant="body2">
-                  <strong>Export Data:</strong> Regularly export attendance data for backup and audit purposes
+                  <strong>Compliance:</strong> Ensure all corrections comply with labor laws
                 </Typography>
               </li>
               <li>
                 <Typography variant="body2">
-                  <strong>Late Arrivals:</strong> Set up automated alerts for frequent late arrivals
+                  <strong>Notifications:</strong> Always notify employees when their requests are approved/rejected
                 </Typography>
               </li>
               <li>
                 <Typography variant="body2">
-                  <strong>Compliance:</strong> Ensure attendance records comply with labor laws and company policies
+                  <strong>Documentation:</strong> Keep supporting documents for all manual corrections
                 </Typography>
               </li>
             </Box>
@@ -654,15 +826,85 @@ const EmployeeAttendanceMainArea: React.FC = () => {
         </Box>
       </Paper>
 
-      {/* Manual Correction Modal */}
-      <ManualCorrectionModal
-        open={correctionModalOpen}
-        onClose={() => setCorrectionModalOpen(false)}
-        onSubmit={handleSubmitCorrection}
-        mode="create"
+      {/* HR Manual Edit Modal */}
+      <HRManualEditModal
+        open={hrEditModalOpen}
+        onClose={() => setHrEditModalOpen(false)}
+        onSubmit={handleHREditSubmit}
+        record={selectedRecord}
+        currentUser={currentHRUser}
       />
+
+      {/* Bulk Action Dialog */}
+      <Dialog 
+        open={bulkActionDialogOpen} 
+        onClose={() => setBulkActionDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {bulkActionType === 'approve' ? 'Bulk Approve Requests' : 'Bulk Reject Requests'}
+        </DialogTitle>
+        <DialogContent>
+          {bulkActionType === 'approve' ? (
+            <Box>
+              <Typography gutterBottom>
+                Are you sure you want to approve all pending correction requests?
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                This will approve {correctionRequests.filter(r => r.status === 'Pending').length} pending request(s).
+              </Typography>
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="caption">
+                  All approved requests will be marked as reviewed by {currentHRUser}.
+                </Typography>
+              </Alert>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography gutterBottom>
+                Are you sure you want to reject all pending correction requests?
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                This will reject {correctionRequests.filter(r => r.status === 'Pending').length} pending request(s).
+              </Typography>
+              
+              <TextField
+                label="Reason for rejection *"
+                multiline
+                rows={3}
+                fullWidth
+                value={bulkActionReason}
+                onChange={(e) => setBulkActionReason(e.target.value)}
+                placeholder="Provide a reason for rejecting all pending requests..."
+                required
+              />
+              
+              <Alert severity="warning" sx={{ mt: 1 }}>
+                <Typography variant="caption">
+                  This action cannot be undone. All rejected requests will be marked with this reason.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkActionDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={bulkActionType === 'approve' ? handleBulkApprove : handleBulkReject}
+            variant="contained"
+            color={bulkActionType === 'approve' ? 'success' : 'error'}
+            className="!text-white"
+            disabled={bulkActionType === 'reject' && !bulkActionReason.trim()}
+          >
+            {bulkActionType === 'approve' ? 'Approve All' : 'Reject All'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };
 
-export default EmployeeAttendanceMainArea;
+export default HRAttendanceMainArea;

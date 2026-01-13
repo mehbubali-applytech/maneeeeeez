@@ -92,6 +92,7 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
       requestedCheckOut: "18:00",
       reason: "Forgot to check-in on time due to meeting",
       status: "Pending",
+      type: "Incorrect Time",
       submittedAt: "2024-01-15T10:30:00Z",
       supportingDocuments: ["meeting_invite.pdf"]
     },
@@ -107,6 +108,7 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
       requestedCheckOut: "22:00",
       reason: "Late check-in due to client call",
       status: "Approved",
+      type: "Incorrect Time",
       submittedAt: "2024-01-14T15:00:00Z",
       reviewedBy: "HR001",
       reviewedAt: "2024-01-14T16:30:00Z",
@@ -124,6 +126,7 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
       requestedCheckOut: "18:00",
       reason: "Forgot to check-out",
       status: "Rejected",
+      type: "Missing Out",
       submittedAt: "2024-01-13T18:30:00Z",
       reviewedBy: "HR001",
       reviewedAt: "2024-01-14T10:00:00Z",
@@ -141,6 +144,7 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
       requestedCheckOut: "18:30",
       reason: "System error - attendance not recorded",
       status: "Pending",
+      type: "Absent",
       submittedAt: "2024-01-12T19:00:00Z",
       supportingDocuments: ["error_screenshot.png", "system_log.txt"]
     }

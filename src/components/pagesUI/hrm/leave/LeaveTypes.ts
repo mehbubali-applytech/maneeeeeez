@@ -19,6 +19,7 @@ export interface ILeaveRequest {
   reviewNotes?: string;
   workflowLevel?: number;
   escalationTo?: string;
+  approvedDate?: string;
 }
 
 export interface ILeavePolicy {
