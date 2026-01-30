@@ -1,4 +1,3 @@
-// UpdateShiftModal.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -6,14 +5,15 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  Switch,
   FormControlLabel,
-  Chip,
-  Box,
+  Switch,
+  CircularProgress,
   Alert,
-  Button,
-  IconButton,
+  Box,
+  Grid,
+  Paper,
   Typography,
+  Chip,
   MenuItem,
   Select,
   FormControl,
@@ -21,91 +21,157 @@ import {
   OutlinedInput,
   Checkbox,
   ListItemText,
+  IconButton,
+  Collapse,
+  Card,
+  CardContent,
+  Button,
+  Divider,
 } from "@mui/material";
 import { useForm, Controller } from "react-hook-form";
 import { toast } from "sonner";
-import { IShift, IShiftForm, BreakTimeSlot, OFFICE_LOCATIONS, TIME_OPTIONS, calculateDuration, calculateTotalBreakTime } from "./ShiftTypes";
-import InputField from "@/components/elements/SharedInputs/InputField";
-import { Add, Delete, AccessTime, LocationOn, NightsStay } from "@mui/icons-material";
+import axios from "axios";
+import { IShift, IShiftForm, BreakTimeSlot } from "./ShiftTypes";
+import {
+  AccessTime,
+  LocationOn,
+  NightsStay,
+  ExpandMore,
+  ExpandLess,
+  Add as AddIcon,
+  Delete,
+  Save,
+  Cancel,
+} from "@mui/icons-material";
 
-interface UpdateShiftModalProps {
+interface Props {
   open: boolean;
-  setOpen: (open: boolean) => void;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
   editData: IShift | null;
-  onSave: (data: IShiftForm, shiftId: number) => void;
+  onSave: (payload: IShiftForm, shiftId: number) => Promise<void>;
 }
 
-const UpdateShiftModal: React.FC<UpdateShiftModalProps> = ({
+const UpdateShiftModal: React.FC<Props> = ({
   open,
   setOpen,
   editData,
   onSave,
 }) => {
-  const [breakSlots, setBreakSlots] = useState<BreakTimeSlot[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
   const {
     control,
     handleSubmit,
+    reset,
     watch,
     setValue,
-    reset,
     register,
-    formState: { errors },
-  } = useForm<IShiftForm>({
-    defaultValues: {
-      shiftName: "",
-      startTime: "09:00",
-      endTime: "18:00",
-      isNightShift: false,
-      gracePeriod: 15,
-      breakTimeSlots: [],
-      applicableLocations: [],
-      activeStatus: true,
-    },
-  });
+    formState: { errors, isDirty },
+  } = useForm<IShiftForm>();
 
-  // Watch values
-  const watchStartTime = watch("startTime");
-  const watchEndTime = watch("endTime");
-  const watchIsNightShift = watch("isNightShift");
-  const watchActiveStatus = watch("activeStatus");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [expandedBreaks, setExpandedBreaks] = useState(false);
+  const [breakSlots, setBreakSlots] = useState<BreakTimeSlot[]>([]);
+  const [branches, setBranches] = useState<Array<{ branch_id: number; branch_name: string }>>([]);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
 
-  // Load data when editData changes
+  // Fetch branches when modal opens
   useEffect(() => {
-    if (editData && open) {
-      reset({
-        shiftName: editData.shiftName,
-        startTime: editData.startTime,
-        endTime: editData.endTime,
-        isNightShift: editData.isNightShift || false,
-        gracePeriod: editData.gracePeriod || 15,
-        breakTimeSlots: editData.breakTimeSlots || [],
-        applicableLocations: editData.applicableLocations || [],
-        activeStatus: editData.activeStatus,
-      });
-      setBreakSlots(editData.breakTimeSlots || []);
-    }
-  }, [editData, open, reset]);
+    if (open) {
+      const fetchBranches = async () => {
+        try {
+          setIsLoadingBranches(true);
+          const response = await axios.get(
+            `${process.env.NEXT_PUBLIC_API_URL}/owner/branch/client`,
+            {
+              withCredentials: true
+            }
+          );
 
-  // Reset when closing
-  useEffect(() => {
-    if (!open) {
-      setBreakSlots([]);
+          if (response.data && response.data.data) {
+            setBranches(response.data.data.map((branch: any) => ({
+              branch_id: branch.id,
+              branch_name: branch.branch_name,
+            })));
+          }
+        } catch (error: any) {
+          console.error("Error fetching branches:", error);
+          toast.error("Failed to load branches");
+        } finally {
+          setIsLoadingBranches(false);
+        }
+      };
+
+      fetchBranches();
     }
   }, [open]);
 
-  const handleToggle = () => setOpen(!open);
+ useEffect(() => {
+  if (editData) {
+    // Parse break_time_slots from string or array
+    const breakSlotsData = Array.isArray(editData.break_time_slots)
+      ? editData.break_time_slots
+      : (typeof editData.break_time_slots === 'string'
+        ? JSON.parse(editData.break_time_slots)
+        : []);
 
-  // Calculate if it's a night shift
-  useEffect(() => {
-    if (watchStartTime && watchEndTime) {
-      const start = parseInt(watchStartTime.replace(':', ''));
-      const end = parseInt(watchEndTime.replace(':', ''));
-      const isNight = end < start;
-      setValue("isNightShift", isNight);
+    setBreakSlots(breakSlotsData || []);
+
+    // Safely extract branch_ids from Branches array
+    let branchIds: number[] = [];
+    
+    if (editData.Branches && Array.isArray(editData.Branches)) {
+      branchIds = editData.Branches
+        .map(branch => {
+          // Try different possible property names for branch_id
+          return branch.branch_id || 
+                 branch.id || 
+                 (branch.shift_branch ? branch.shift_branch.branch_id : null);
+        })
+        .filter(id => id !== null && id !== undefined && Number.isInteger(Number(id)))
+        .map(id => Number(id));
     }
-  }, [watchStartTime, watchEndTime, setValue]);
+
+    reset({
+      shift_name: editData.shift_name,
+      start_time: editData.start_time,
+      end_time: editData.end_time,
+      is_night_shift: editData.is_night_shift,
+      grace_period: editData.grace_period,
+      break_time_slots: breakSlotsData || [],
+      branch_ids: branchIds, // Use the cleaned array
+      active_status: editData.active_status,
+    });
+  }
+}, [editData, reset]);
+
+  // Watch values
+  const watchStartTime = watch("start_time");
+  const watchEndTime = watch("end_time");
+  const watchIsNightShift = watch("is_night_shift");
+  const watchActiveStatus = watch("active_status");
+
+  // Calculate shift duration
+  const calculateDuration = () => {
+    if (!watchStartTime || !watchEndTime) return "";
+
+    const formatTime = (time: string) => {
+      if (!time) return "";
+      const parts = time.split(':');
+      return `${parts[0]}:${parts[1]}`;
+    };
+
+    const start = new Date(`2000-01-01T${formatTime(watchStartTime)}`);
+    const end = new Date(`2000-01-01T${formatTime(watchEndTime)}`);
+
+    if (watchIsNightShift) {
+      end.setDate(end.getDate() + 1);
+    }
+
+    const diffMs = end.getTime() - start.getTime();
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    return `${hours}h ${minutes}m`;
+  };
 
   // Handle break time slots
   const addBreakSlot = () => {
@@ -115,499 +181,711 @@ const UpdateShiftModal: React.FC<UpdateShiftModalProps> = ({
     };
     const updatedSlots = [...breakSlots, newBreakSlot];
     setBreakSlots(updatedSlots);
-    setValue("breakTimeSlots", updatedSlots);
+    setValue("break_time_slots", updatedSlots);
   };
 
   const removeBreakSlot = (index: number) => {
     const updatedSlots = breakSlots.filter((_, i) => i !== index);
     setBreakSlots(updatedSlots);
-    setValue("breakTimeSlots", updatedSlots);
+    setValue("break_time_slots", updatedSlots);
   };
 
   const updateBreakSlot = (index: number, field: keyof BreakTimeSlot, value: string) => {
     const updatedSlots = [...breakSlots];
     updatedSlots[index] = { ...updatedSlots[index], [field]: value };
     setBreakSlots(updatedSlots);
-    setValue("breakTimeSlots", updatedSlots);
+    setValue("break_time_slots", updatedSlots);
   };
 
-  const onSubmit = async (data: IShiftForm) => {
-    // Validate required fields
-    if (!data.shiftName?.trim()) {
-      toast.error("Shift Name is required");
-      return;
-    }
+const onSubmit = async (data: IShiftForm) => {
+  if (!editData) return;
 
-    if (!data.startTime || !data.endTime) {
-      toast.error("Start Time and End Time are required");
-      return;
-    }
+  setIsSubmitting(true);
 
-    setIsSubmitting(true);
-    
-    try {
-      if (!editData?.shiftId) {
-        toast.error("Shift ID is missing");
-        return;
+  try {
+    // Clean branch_ids to remove any null/undefined values
+    const cleanBranchIds = (data.branch_ids || [])
+      .filter(id => id !== null && id !== undefined && Number.isInteger(Number(id)))
+      .map(id => Number(id));
+
+    const payload = {
+      ...data,
+      branch_ids: cleanBranchIds,
+    };
+
+    console.log("Submitting payload:", payload);
+
+    // Call the parent handler
+    await onSave(payload, editData.shift_id);
+
+  } catch (error: any) {
+    console.error("Error updating shift:", error);
+
+    let errorMessage = "Failed to update shift";
+    if (error.response?.data) {
+      if (typeof error.response.data === 'string') {
+        errorMessage = error.response.data;
+      } else if (error.response.data.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response.data.error) {
+        errorMessage = error.response.data.error;
       }
-
-      await onSave(data, editData.shiftId);
-      toast.success("Shift updated successfully!");
-      setOpen(false);
-      
-    } catch (error) {
-      console.error("Error saving shift:", error);
-      toast.error("Failed to update shift");
-    } finally {
-      setIsSubmitting(false);
+    } else if (error.message) {
+      errorMessage = error.message;
     }
+
+    toast.error(errorMessage);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
+  const formatTimeForInput = (time: string) => {
+    if (!time) return "";
+    const parts = time.split(':');
+    return `${parts[0]}:${parts[1]}`; // Remove seconds for input field
   };
 
-  const getTotalBreakTime = () => {
-    const totalMinutes = calculateTotalBreakTime(breakSlots);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-  };
+  if (!editData) return null;
 
   return (
-    <>
-      <Dialog 
-        open={open} 
-        onClose={handleToggle} 
-        fullWidth 
-        maxWidth="md"
-        sx={{
-          '& .MuiDialog-paper': {
-            maxWidth: 900,
-            width: '100%',
-            margin: 2,
-            maxHeight: 'calc(100vh - 64px)',
-            borderRadius: '8px',
-            overflow: 'hidden',
-            '@media (max-width: 900px)': {
-              margin: 1,
-              maxWidth: 'calc(100% - 16px)',
-            }
-          }
-        }}
-      >
-        <DialogTitle className="!py-3 !px-4 border-b border-gray-200">
-          <div className="flex justify-between items-center">
-            <h5 className="modal-title text-lg font-semibold">
-              Edit Shift
-            </h5>
-            <button
-              onClick={handleToggle}
-              type="button"
-              className="bd-btn-close"
-            >
-              <i className="fa-solid fa-xmark-large"></i>
-            </button>
-          </div>
-        </DialogTitle>
-        <DialogContent 
-          className="common-scrollbar overflow-y-auto"
-          sx={{ 
-            maxHeight: 'calc(80vh - 120px)',
-            padding: '24px !important'
-          }}
-        >
-          {editData && (
-            <Alert severity="info" sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <i className="fa-solid fa-info-circle mr-2"></i>
-                <Typography variant="body2">
-                  Editing shift: <strong>{editData.shiftName}</strong>
-                  {editData.assignedEmployees && editData.assignedEmployees > 0 && (
-                    <span> • Assigned to {editData.assignedEmployees} employee{editData.assignedEmployees !== 1 ? 's' : ''}</span>
-                  )}
-                </Typography>
-              </Box>
-            </Alert>
-          )}
+    <Dialog
+      open={open}
+      onClose={() => !isSubmitting && setOpen(false)}
+      fullWidth
+      maxWidth="md"
+      PaperProps={{
+        sx: { borderRadius: 2 }
+      }}
+    >
+      <DialogTitle sx={{
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'grey.50',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 2
+      }}>
+        <AccessTime sx={{ color: 'primary.main' }} />
+        <Box>
+          <Typography variant="h6">Update Shift</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Editing: <strong>{editData.shift_name}</strong>
+          </Typography>
+        </Box>
+      </DialogTitle>
 
-          <form onSubmit={handleSubmit(onSubmit)}>
-            <div className="grid grid-cols-12 gap-y-2.5">
-              {/* Left Column - Basic Info */}
-              <div className="col-span-12 md:col-span-6">
-                <div className="card__wrapper">
-                  <h6 className="card__sub-title mb-4">Shift Details</h6>
-                  
-                  <div className="grid grid-cols-12 gap-y-5 gap-x-5 maxXs:gap-x-0">
-                    {/* Shift Name */}
-                    <div className="col-span-12">
-                      <InputField
-                        label="Shift Name *"
-                        id="shiftName"
-                        type="text"
-                        required={true}
-                        register={register("shiftName", { 
-                          required: "Shift name is required" 
-                        })}
-                        error={errors.shiftName}
-                      />
-                    </div>
+      <DialogContent sx={{ p: 0 }}>
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <Box sx={{ p: 3 }}>
+            {/* Two-column layout */}
+            <Grid container spacing={3}>
+              {/* Left Column */}
+              <Grid item xs={12} md={6}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {/* Shift Name */}
+                  <div>
+                    <label className="form-label">Shift Name *</label>
+                    <input
+                      className={`form-control ${errors.shift_name ? 'border-red-500' : ''}`}
+                      placeholder="Enter shift name"
+                      disabled={isSubmitting}
+                      {...register("shift_name", {
+                        required: "Shift name is required",
+                        minLength: {
+                          value: 2,
+                          message: "Shift name must be at least 2 characters"
+                        },
+                        maxLength: {
+                          value: 100,
+                          message: "Shift name cannot exceed 100 characters"
+                        }
+                      })}
+                    />
+                    {errors.shift_name && (
+                      <span className="text-red-500 text-sm">
+                        {errors.shift_name.message}
+                      </span>
+                    )}
+                  </div>
 
-                    {/* Start Time & End Time */}
-                    <div className="col-span-12 md:col-span-6">
-                      <div className="form-group">
-                        <label className="form-label flex items-center">
-                          <AccessTime fontSize="small" className="mr-2" />
-                          Start Time *
-                        </label>
-                        <Controller
-                          name="startTime"
-                          control={control}
-                          rules={{ required: "Start time is required" }}
-                          render={({ field, fieldState }) => (
-                            <select
-                              className={`form-control ${fieldState.error ? 'is-invalid' : ''}`}
-                              {...field}
-                            >
-                              {TIME_OPTIONS.map((time) => (
-                                <option key={time.value} value={time.value}>
-                                  {time.label}
-                                </option>
-                              ))}
-                            </select>
-                          )}
+                  {/* Start Time & End Time */}
+                  <Grid container spacing={2}>
+                    <Grid item xs={6}>
+                      <div>
+                        <label className="form-label">Start Time *</label>
+                        <input
+                          type="time"
+                          className={`form-control ${errors.start_time ? 'border-red-500' : ''}`}
+                          disabled={isSubmitting}
+                          {...register("start_time", {
+                            required: "Start time is required"
+                          })}
+                          step="300"
                         />
-                        {errors.startTime && (
-                          <div className="invalid-feedback">{errors.startTime.message}</div>
+                        {errors.start_time && (
+                          <span className="text-red-500 text-sm">
+                            {errors.start_time.message}
+                          </span>
                         )}
                       </div>
-                    </div>
-
-                    <div className="col-span-12 md:col-span-6">
-                      <div className="form-group">
-                        <label className="form-label flex items-center">
-                          <AccessTime fontSize="small" className="mr-2" />
-                          End Time *
-                        </label>
-                        <Controller
-                          name="endTime"
-                          control={control}
-                          rules={{ required: "End time is required" }}
-                          render={({ field, fieldState }) => (
-                            <select
-                              className={`form-control ${fieldState.error ? 'is-invalid' : ''}`}
-                              {...field}
-                            >
-                              {TIME_OPTIONS.map((time) => (
-                                <option key={time.value} value={time.value}>
-                                  {time.label}
-                                </option>
-                              ))}
-                            </select>
-                          )}
+                    </Grid>
+                    <Grid item xs={6}>
+                      <div>
+                        <label className="form-label">End Time *</label>
+                        <input
+                          type="time"
+                          className={`form-control ${errors.end_time ? 'border-red-500' : ''}`}
+                          disabled={isSubmitting}
+                          {...register("end_time", {
+                            required: "End time is required"
+                          })}
+                          step="300"
                         />
-                        {errors.endTime && (
-                          <div className="invalid-feedback">{errors.endTime.message}</div>
+                        {errors.end_time && (
+                          <span className="text-red-500 text-sm">
+                            {errors.end_time.message}
+                          </span>
                         )}
                       </div>
-                    </div>
+                    </Grid>
+                  </Grid>
 
-                    {/* Shift Duration Display */}
-                    <div className="col-span-12">
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <Typography variant="body2" className="font-medium text-blue-800">
-                              Shift Duration
-                            </Typography>
-                            <Typography variant="h6" className="text-blue-900">
-                              {calculateDuration(watchStartTime, watchEndTime, watchIsNightShift)}
-                            </Typography>
-                          </div>
-                          {watchIsNightShift && (
-                            <Chip
-                              icon={<NightsStay />}
-                              label="Night Shift"
-                              color="primary"
-                              variant="outlined"
-                            />
-                          )}
-                        </div>
-                        <Typography variant="caption" className="text-blue-700 mt-1">
-                          {watchStartTime} - {watchEndTime}
+                  {/* Shift Duration Display */}
+                  <Paper variant="outlined" sx={{ p: 2, mt: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Shift Duration
+                        </Typography>
+                        <Typography variant="h6" color="primary">
+                          {calculateDuration()}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatTimeForInput(watchStartTime)} - {formatTimeForInput(watchEndTime)}
                           {watchIsNightShift && " (Next Day)"}
                         </Typography>
-                      </div>
-                    </div>
+                      </Box>
+                      {watchIsNightShift && (
+                        <Chip
+                          icon={<NightsStay />}
+                          label="Night Shift"
+                          color="primary"
+                          variant="outlined"
+                        />
+                      )}
+                    </Box>
+                  </Paper>
 
-                    {/* Break Time Slots */}
-                    <div className="col-span-12">
-                      <div className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex justify-between items-center mb-3">
-                          <h6 className="font-medium">Break Time Slots</h6>
+                  {/* Grace Period */}
+                  <div>
+                    <label className="form-label">Grace Period (minutes)</label>
+                    <input
+                      type="number"
+                      className={`form-control ${errors.grace_period ? 'border-red-500' : ''}`}
+                      placeholder="Enter grace period in minutes"
+                      disabled={isSubmitting}
+                      {...register("grace_period", {
+                        min: { value: 0, message: "Grace period must be positive" },
+                        max: { value: 60, message: "Grace period cannot exceed 60 minutes" }
+                      })}
+                    />
+                    {errors.grace_period && (
+                      <span className="text-red-500 text-sm">
+                        {errors.grace_period.message}
+                      </span>
+                    )}
+                  </div>
+                </Box>
+              </Grid>
+
+              {/* Right Column */}
+              <Grid item xs={12} md={6}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {/* Break Time Slots */}
+                  <Card variant="outlined">
+                    <CardContent sx={{ p: '12px !important' }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => setExpandedBreaks(!expandedBreaks)}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                            Break Time Slots
+                          </Typography>
+                          <Chip
+                            label={`${breakSlots.length} break${breakSlots.length !== 1 ? 's' : ''}`}
+                            size="small"
+                            variant="outlined"
+                            color="info"
+                          />
+                        </Box>
+                        <IconButton size="small" disabled={isSubmitting}>
+                          {expandedBreaks ? <ExpandLess /> : <ExpandMore />}
+                        </IconButton>
+                      </Box>
+
+                      <Collapse in={expandedBreaks}>
+                        <Box sx={{ mt: 2 }}>
                           <Button
                             size="small"
-                            startIcon={<Add />}
+                            startIcon={<AddIcon />}
                             onClick={addBreakSlot}
                             variant="outlined"
+                            sx={{ mb: 2 }}
+                            disabled={isSubmitting}
                           >
                             Add Break
                           </Button>
-                        </div>
-                        
-                        {breakSlots.length === 0 ? (
-                          <Alert severity="info">
-                            No break slots added. Click {`"Add Break"`} to add break times.
-                          </Alert>
-                        ) : (
-                          <div className="space-y-3">
-                            {breakSlots.map((breakSlot, index) => (
-                              <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                                <div className="flex-1 grid grid-cols-2 gap-3">
-                                  <div>
+
+                          {breakSlots.length === 0 ? (
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                              No break slots added. Click {`"Add Break"`} to add break times.
+                            </Alert>
+                          ) : (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                              {breakSlots.map((breakSlot, index) => (
+                                <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+                                  <div style={{ flex: 1 }}>
                                     <label className="form-label text-sm">Break Start</label>
-                                    <select
-                                      className="form-control form-control-sm"
+                                    <input
+                                      type="time"
+                                      className="form-control"
                                       value={breakSlot.breakStart}
                                       onChange={(e) => updateBreakSlot(index, 'breakStart', e.target.value)}
-                                    >
-                                      {TIME_OPTIONS.map((time) => (
-                                        <option key={time.value} value={time.value}>
-                                          {time.label}
-                                        </option>
-                                      ))}
-                                    </select>
+                                      step="300"
+                                      disabled={isSubmitting}
+                                    />
                                   </div>
-                                  <div>
+
+                                  <Typography variant="body2" sx={{ mx: 1 }}>to</Typography>
+
+                                  <div style={{ flex: 1 }}>
                                     <label className="form-label text-sm">Break End</label>
-                                    <select
-                                      className="form-control form-control-sm"
+                                    <input
+                                      type="time"
+                                      className="form-control"
                                       value={breakSlot.breakEnd}
                                       onChange={(e) => updateBreakSlot(index, 'breakEnd', e.target.value)}
-                                    >
-                                      {TIME_OPTIONS.map((time) => (
-                                        <option key={time.value} value={time.value}>
-                                          {time.label}
-                                        </option>
-                                      ))}
-                                    </select>
+                                      step="300"
+                                      disabled={isSubmitting}
+                                    />
                                   </div>
-                                </div>
-                                <IconButton
-                                  size="small"
-                                  onClick={() => removeBreakSlot(index)}
-                                  className="text-red-500"
-                                >
-                                  <Delete fontSize="small" />
-                                </IconButton>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        
-                        {breakSlots.length > 0 && (
-                          <Typography variant="caption" className="text-gray-600 mt-2 block">
-                            Total break time: {getTotalBreakTime()}
-                          </Typography>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Right Column - Additional Settings */}
-              <div className="col-span-12 md:col-span-6">
-                <div className="card__wrapper">
-                  <h6 className="card__sub-title mb-4">Additional Settings</h6>
-                  
-                  <div className="grid grid-cols-12 gap-y-5 gap-x-5 maxXs:gap-x-0">
-                    {/* Grace Period */}
-                    <div className="col-span-12">
-                      <InputField
-                        label="Grace Period (minutes)"
-                        id="gracePeriod"
-                        type="number"
-                        required={false}
-                        register={register("gracePeriod", {
-                          min: { value: 0, message: "Grace period must be positive" },
-                          max: { value: 60, message: "Grace period cannot exceed 60 minutes" }
-                        })}
-                        error={errors.gracePeriod}
-                        defaultValue="15"
-                      />
-                    </div>
-
-                    {/* Night Shift Toggle */}
-                    <div className="col-span-12">
-                      <div className="card__wrapper !border !border-gray-200 !rounded-lg !p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h6 className="font-medium mb-1 flex items-center">
-                              <NightsStay fontSize="small" className="mr-2" />
-                              Night Shift
-                            </h6>
-                            <p className="text-sm text-gray-600">
-                              {watchIsNightShift 
-                                ? "Shift ends on the next day (End Time < Start Time)" 
-                                : "Regular day shift"}
-                            </p>
-                          </div>
-                          <Controller
-                            name="isNightShift"
-                            control={control}
-                            render={({ field }) => (
-                              <FormControlLabel
-                                control={
-                                  <Switch
-                                    checked={field.value}
-                                    onChange={field.onChange}
-                                    color="primary"
-                                    disabled // Auto-calculated based on times
-                                  />
-                                }
-                                label={
-                                  <Chip
-                                    label={field.value ? "YES" : "NO"}
+                                  <IconButton
                                     size="small"
-                                    color={field.value ? "primary" : "default"}
-                                    variant="outlined"
-                                  />
-                                }
-                              />
-                            )}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Applicable Locations */}
-                    <div className="col-span-12">
-                      <div className="form-group">
-                        <label className="form-label flex items-center">
-                          <LocationOn fontSize="small" className="mr-2" />
-                          Applicable Office Locations
-                        </label>
-                        <Controller
-                          name="applicableLocations"
-                          control={control}
-                          render={({ field }) => (
-                            <FormControl fullWidth size="small">
-                              <Select
-                                multiple
-                                value={field.value || []}
-                                onChange={field.onChange}
-                                input={<OutlinedInput label="Locations" />}
-                                renderValue={(selected) => (
-                                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                    {(selected as string[]).map((value) => (
-                                      <Chip key={value} label={value} size="small" />
-                                    ))}
-                                  </Box>
-                                )}
-                              >
-                                {OFFICE_LOCATIONS.map((location) => (
-                                  <MenuItem key={location} value={location}>
-                                    <Checkbox checked={(field.value || []).includes(location)} />
-                                    <ListItemText primary={location} />
-                                  </MenuItem>
-                                ))}
-                              </Select>
-                            </FormControl>
+                                    onClick={() => removeBreakSlot(index)}
+                                    color="error"
+                                    sx={{ ml: 1, mt: 2 }}
+                                    disabled={isSubmitting}
+                                  >
+                                    <Delete fontSize="small" />
+                                  </IconButton>
+                                </Box>
+                              ))}
+                            </Box>
                           )}
-                        />
-                        <div className="form-text">
-                          Optional: Select locations where this shift applies
-                        </div>
-                      </div>
-                    </div>
+                        </Box>
+                      </Collapse>
+                    </CardContent>
+                  </Card>
 
-                    {/* Active Status */}
-                    <div className="col-span-12">
-                      <div className="card__wrapper !border !border-gray-200 !rounded-lg !p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h6 className="font-medium mb-1">Active Status</h6>
-                            <p className="text-sm text-gray-600">
-                              {watchActiveStatus 
-                                ? "Shift is active and available for assignment" 
-                                : "Shift is inactive and hidden from assignment"}
-                            </p>
-                          </div>
-                          <Controller
-                            name="activeStatus"
-                            control={control}
-                            render={({ field }) => (
-                              <FormControlLabel
-                                control={
-                                  <Switch
-                                    checked={field.value}
-                                    onChange={field.onChange}
-                                    color="success"
-                                  />
-                                }
-                                label={
-                                  <Chip
-                                    label={field.value ? "ACTIVE" : "INACTIVE"}
-                                    size="small"
-                                    color={field.value ? "success" : "default"}
-                                    variant={field.value ? "filled" : "outlined"}
-                                  />
-                                }
-                              />
-                            )}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+                  {/* Applicable Branches */}
+                  <Box>
+                    <Typography
+                      variant="subtitle2"
+                      gutterBottom
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        fontWeight: 600,
+                        color: 'text.primary',
+                        mb: 1
+                      }}
+                    >
+                      <LocationOn fontSize="small" sx={{ mr: 1, color: 'primary.main' }} />
+                      Applicable Branches
+                    </Typography>
 
-            <div className="submit__btn text-center mt-6 pt-4 border-t border-gray-200">
-              <div className="flex justify-between items-center">
-                <div className="space-x-2">
-                  <button
-                    type="button"
-                    className="btn btn-outline-primary"
-                    onClick={() => {
-                      toast.info("Assign employees feature would open here");
-                    }}
-                  >
-                    <i className="fa-regular fa-user-plus mr-2"></i>
-                    Assign to Employees
-                  </button>
-                </div>
-                <div className="space-x-2">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary"
-                    onClick={handleToggle}
-                    disabled={isSubmitting}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={isSubmitting || !watchStartTime || !watchEndTime}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <i className="fa-solid fa-spinner fa-spin mr-2"></i>
-                        Updating...
-                      </>
+                    {isLoadingBranches ? (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          p: 3,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          borderRadius: 1,
+                          bgcolor: 'grey.50',
+                          minHeight: 56
+                        }}
+                      >
+                        <CircularProgress size={20} sx={{ mr: 1.5 }} />
+                        <Typography variant="body2" color="text.secondary">
+                          Loading branches...
+                        </Typography>
+                      </Box>
+                    ) : branches.length === 0 ? (
+                      <Alert
+                        severity="warning"
+                        sx={{
+                          mb: 2,
+                          borderRadius: 1,
+                        }}
+                      >
+                        <Typography variant="body2">
+                          No branches available. Please create branches first.
+                        </Typography>
+                      </Alert>
                     ) : (
-                      <>
-                        <i className="fa-regular fa-save mr-2"></i>
-                        Update Shift
-                      </>
+                      <Controller
+                        name="branch_ids"
+                        control={control}
+                        render={({ field }) => (
+                          <FormControl fullWidth size="small">
+                            <InputLabel
+                              id="branch-select-label"
+                              sx={{
+                                backgroundColor: 'background.paper',
+                                px: 0.5,
+                                '&.Mui-focused': {
+                                  color: 'primary.main',
+                                }
+                              }}
+                            >
+                              Select branches
+                            </InputLabel>
+                            <Select
+                              labelId="branch-select-label"
+                              multiple
+                              value={field.value || []}
+                              onChange={field.onChange}
+                              input={<OutlinedInput label="Select branches" />}
+                              renderValue={(selected) => {
+                                if ((selected as number[]).length === 0) {
+                                  return (
+                                    <Typography variant="body2" color="text.secondary">
+                                      No branches selected
+                                    </Typography>
+                                  );
+                                }
+
+                                const selectedBranches = branches
+                                  .filter(branch => (selected as number[]).includes(branch.branch_id));
+
+                                return (
+                                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, py: 0.5 }}>
+                                    {selectedBranches.slice(0, 2).map((branch) => (
+                                      <Chip
+                                        key={branch.branch_id}
+                                        label={branch.branch_name}
+                                        size="small"
+                                        sx={{
+                                          bgcolor: 'primary.main',
+                                          color: 'white',
+                                          fontWeight: 500,
+                                          height: 24,
+                                          '& .MuiChip-label': {
+                                            px: 1,
+                                            py: 0.25,
+                                          }
+                                        }}
+                                      />
+                                    ))}
+                                    {(selected as number[]).length > 2 && (
+                                      <Chip
+                                        label={`+${(selected as number[]).length - 2} more`}
+                                        size="small"
+                                        sx={{
+                                          bgcolor: 'grey.100',
+                                          color: 'text.secondary',
+                                          fontWeight: 500,
+                                          height: 24,
+                                          '& .MuiChip-label': {
+                                            px: 1,
+                                            py: 0.25,
+                                          }
+                                        }}
+                                      />
+                                    )}
+                                  </Box>
+                                );
+                              }}
+                              MenuProps={{
+                                PaperProps: {
+                                  sx: {
+                                    maxHeight: 250,
+                                    mt: 1,
+                                    '& .MuiMenuItem-root': {
+                                      py: 1,
+                                      '&:hover': {
+                                        bgcolor: 'primary.light',
+                                        color: 'white',
+                                        '& .MuiTypography-root': {
+                                          color: 'white',
+                                        },
+                                        '& .MuiCheckbox-root': {
+                                          color: 'white',
+                                        }
+                                      },
+                                      '&.Mui-selected': {
+                                        bgcolor: 'primary.main',
+                                        color: 'white',
+                                        '&:hover': {
+                                          bgcolor: 'primary.dark',
+                                        },
+                                        '& .MuiTypography-root': {
+                                          color: 'white',
+                                        },
+                                        '& .MuiCheckbox-root': {
+                                          color: 'white',
+                                          '&.Mui-checked': {
+                                            color: 'white',
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }}
+                              sx={{
+                                '& .MuiOutlinedInput-notchedOutline': {
+                                  borderColor: 'grey.300',
+                                },
+                                '&:hover .MuiOutlinedInput-notchedOutline': {
+                                  borderColor: 'primary.main',
+                                },
+                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                  borderColor: 'primary.main',
+                                  borderWidth: 2,
+                                },
+                                '& .MuiSelect-select': {
+                                  minHeight: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  py: 1,
+                                }
+                              }}
+                              disabled={isSubmitting}
+                            >
+                              <MenuItem
+                                dense
+                                onClick={() => {
+                                  if (field.value?.length === branches.length) {
+                                    field.onChange([]);
+                                  } else {
+                                    field.onChange(branches.map(b => b.branch_id));
+                                  }
+                                }}
+                                sx={{
+                                  borderBottom: '1px solid',
+                                  borderColor: 'divider',
+                                  mb: 0.5,
+                                  fontWeight: 600,
+                                  '&:hover': {
+                                    bgcolor: 'transparent',
+                                    color: 'inherit',
+                                  }
+                                }}
+                              >
+                                <Checkbox
+                                  checked={field.value?.length === branches.length}
+                                  indeterminate={field.value?.length > 0 && field.value?.length < branches.length}
+                                  sx={{
+                                    color: 'primary.main',
+                                    '&.Mui-checked': {
+                                      color: 'primary.main',
+                                    },
+                                  }}
+                                />
+                                <ListItemText
+                                  primary={
+                                    <Typography variant="subtitle2">
+                                      {field.value?.length === branches.length
+                                        ? "Deselect All"
+                                        : "Select All"
+                                      }
+                                    </Typography>
+                                  }
+                                />
+                              </MenuItem>
+
+                              <Divider sx={{ my: 0.5 }} />
+
+                              {branches.map((branch) => (
+                                <MenuItem
+                                  key={branch.branch_id}
+                                  value={branch.branch_id}
+                                  dense
+                                  sx={{
+                                    borderRadius: 0.5,
+                                    mx: 0.5,
+                                    my: 0.25,
+                                    '&.Mui-selected': {
+                                      bgcolor: 'primary.main',
+                                      color: 'white',
+                                      '&:hover': {
+                                        bgcolor: 'primary.dark',
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <Checkbox
+                                    checked={(field.value || []).includes(branch.branch_id)}
+                                    sx={{
+                                      color: 'primary.main',
+                                      '&.Mui-checked': {
+                                        color: 'white',
+                                      },
+                                    }}
+                                  />
+                                  <ListItemText
+                                    primary={
+                                      <Typography
+                                        variant="body2"
+                                        sx={{
+                                          color: (field.value || []).includes(branch.branch_id)
+                                            ? 'white'
+                                            : 'inherit',
+                                          fontWeight: (field.value || []).includes(branch.branch_id)
+                                            ? 600
+                                            : 400,
+                                        }}
+                                      >
+                                        {branch.branch_name}
+                                      </Typography>
+                                    }
+                                  />
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        )}
+                      />
                     )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </>
+
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{
+                        mt: 1,
+                        display: 'block',
+                        fontStyle: 'italic'
+                      }}
+                    >
+                      Select branches where this shift applies (leave empty for all branches)
+                    </Typography>
+                  </Box>
+
+                  {/* Night Shift Toggle */}
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                          <NightsStay fontSize="small" sx={{ mr: 1 }} />
+                          Night Shift
+                        </Typography>
+                      </Box>
+                      <Controller
+                        name="is_night_shift"
+                        control={control}
+                        render={({ field }) => (
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={field.value}
+                                onChange={field.onChange}
+                                color="primary"
+                                disabled={isSubmitting}
+                              />
+                            }
+                            label={
+                              <Chip
+                                label={field.value ? "YES" : "NO"}
+                                size="small"
+                                color={field.value ? "primary" : "default"}
+                                variant="outlined"
+                              />
+                            }
+                          />
+                        )}
+                      />
+                    </Box>
+                  </Paper>
+
+                  {/* Active Status */}
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Active Status
+                        </Typography>
+                      </Box>
+                      <Controller
+                        name="active_status"
+                        control={control}
+                        render={({ field }) => (
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={field.value}
+                                onChange={field.onChange}
+                                color="success"
+                                disabled={isSubmitting}
+                              />
+                            }
+                            label={
+                              <Chip
+                                label={field.value ? "ACTIVE" : "INACTIVE"}
+                                size="small"
+                                color={field.value ? "success" : "default"}
+                                variant="outlined"
+                              />
+                            }
+                          />
+                        )}
+                      />
+                    </Box>
+                  </Paper>
+                </Box>
+              </Grid>
+            </Grid>
+
+            {/* Action Buttons */}
+            <Divider sx={{ my: 3 }} />
+            <Box sx={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 2
+            }}>
+              <Button
+                variant="outlined"
+                startIcon={<Cancel />}
+                onClick={() => setOpen(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="contained"
+                className="!text-white"
+                startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : <Save />}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Updating..." : "Update Shift"}
+              </Button>
+            </Box>
+          </Box>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };
 

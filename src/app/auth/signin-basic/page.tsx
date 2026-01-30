@@ -21,7 +21,7 @@ const SignInBasicMain = () => {
                                 <Link href="#" className="authentication-logo logo-white">
                                     <Image style={{ width: "100%", height: "auto" }} src={logoWhite} alt="logo" />
                                 </Link>
-                                <h4 className="mb-[15px]">Welcome to BBH</h4>
+                                <h4 className="mb-[15px]">Welcome to HRSuite</h4>
                                 <p className="mb-[15px]">Please sign-in to your account and start the adventure</p>
                             </div>
                             {/* Sign in basic form area*/}

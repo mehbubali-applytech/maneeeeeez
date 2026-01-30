@@ -2,12 +2,12 @@ import { SidebarCategory } from "@/interface";
 
 
 const subItems = [
-          { label: "Employees", link: "/owner/employees" },
-          { label: "Designations", link: "/owner/designations" },
-          { label: "Attendance", link: "/owner/attendance" },
-          { label: "Leaves", link: "/owner/leaves" },
-          { label: "Holidays", link: "/owner/holidays" },
-        ]
+  { label: "Designations", link: "/owner/designations" },
+  { label: "Employees", link: "/owner/employees" },
+  { label: "Attendance", link: "/owner/attendance" },
+  { label: "Leaves", link: "/owner/leaves" },
+  { label: "Holidays", link: "/owner/holidays" },
+]
 const businessOwnerSidebarData: SidebarCategory[] = [
   {
     id: 1,
@@ -24,8 +24,8 @@ const businessOwnerSidebarData: SidebarCategory[] = [
   },
   {
     id: 2,
-    category:"Company Management",
-    items:[
+    category: "Company Management",
+    items: [
       {
         id: 21,
         label: "Overview",
@@ -57,18 +57,19 @@ const businessOwnerSidebarData: SidebarCategory[] = [
     id: 3,
     category: "HR Management",
     items: [
-      {
+            {
         id: 31,
-        label: "Employees",
-        icon: "fa-light fa-users",
-        link: "/owner/employees"
-      },
-      {
-        id: 32,
         label: "Designations",
         icon: "fa-light fa-user-tag",
         link: "/owner/designations"
       },
+      {
+        id: 32,
+        label: "Employees",
+        icon: "fa-light fa-users",
+        link: "/owner/employees"
+      },
+
       {
         id: 33,
         label: "Attendance",
@@ -87,8 +88,8 @@ const businessOwnerSidebarData: SidebarCategory[] = [
         icon: "fa-light fa-calendar-alt",
         link: "/owner/holidays"
       },
-       {
-        id: 35,
+      {
+        id: 36,
         label: "Offer Letters",
         icon: "fa-light fa-calendar-alt",
         link: "/owner/offer-letter"
@@ -99,7 +100,7 @@ const businessOwnerSidebarData: SidebarCategory[] = [
     id: 4,
     category: "Payroll Management",
     items: [
-            {
+      {
         id: 41,
         label: "Grades",
         icon: "fa-light icon-lobster",

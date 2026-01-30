@@ -19,7 +19,7 @@ export interface IAttendanceRecord {
   correctionRequest?: {
     status: 'Pending' | 'Approved' | 'Rejected';
     requestedBy: string;
-    requestedAt: string;
+    requestedAt: string; 
     reason: string;
     correctedCheckIn?: string;
     correctedCheckOut?: string;
@@ -70,6 +70,22 @@ export interface IAttendanceSummary {
   totalWorkHours: number;
   averageHoursPerDay: number;
 }
+
+export interface ICompanyAttendanceSummary {
+  client_id: number;
+  date: string; // YYYY-MM-DD
+
+  totalEmployees: number;
+  present: number;
+  absent: number;
+  late: number;
+
+  attendanceRate: number; // percentage (0–100)
+
+  totalWorkedMinutes: number;
+  totalWorkedHours: number; // decimal hours (e.g. 720.83)
+}
+
 
 // Mock data
 export const ATTENDANCE_STATUS = {
@@ -162,4 +178,57 @@ export interface IHRManualEditData {
   overrideReason: string;
   changedBy: string;
   changedAt: string;
+}
+
+
+export interface ICorrectedAttendance {
+  corrected_attendance_id: number;
+  employee_id: number;
+  employee_code: string;
+  first_name: string;
+  last_name: string;
+  designation: string;
+  attendance_date: string;
+  check_in: string;
+  check_out: string;
+  shift_id: number;
+  location?: string;
+  source: string;
+  reason: string;
+  status: 'Need Approval' | 'Approved' | 'Rejected';
+  approved_by?: number;
+  approved_at?: string;
+  actions: any;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ICorrectionRequestPayload {
+  attendance_id?: number;
+  employee_id: number;
+  attendance_date: string;
+  check_in_time: string;
+  check_out_time: string;
+  shift_id: number;
+  location?: string;
+  reason: string;
+  source?: string;
+}
+
+export interface ICorrectionActionPayload {
+  corrected_attendance_id: number;
+  status: 'Approved' | 'Rejected';
+  approved_by: number;
+  notes?: string;
+}
+
+export interface IAbsentCorrectionPayload {
+  employee_id: number;
+  attendance_date: string;
+  shift_id: number;
+  check_in_time: string;
+  check_out_time: string;
+  location?: string;
+  reason: string;
+  source?: string;
 }

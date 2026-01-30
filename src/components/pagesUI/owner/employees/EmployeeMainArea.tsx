@@ -1,46 +1,218 @@
-// EmployeeMainArea.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Button, Box, Typography, Alert, Chip } from "@mui/material";
+import { Button, Box, Typography, Alert, Chip, CircularProgress } from "@mui/material";
 import {
   PersonAdd,
   Download,
   Upload,
-  FilterList,
   Search,
-  Person,
-  Group,
-  Business,
-  LocationOn
+  Person
 } from "@mui/icons-material";
 import EmployeeTable from "./EmployeeTable";
 import EmployeeSummary from "./EmployeeSummary";
 import BulkImportModal from "./BulkImportModal";
-import { createMockEmployees, IEmployee } from "./EmployeeTypes";
+import { IEmployee } from "./EmployeeTypes";
+import { isAuthenticated } from "@/app/helpers/authChecker";
+import { useRouter } from "next/navigation";
+import axios from "axios";
+import { toast } from "sonner";
 
 const EmployeeMainArea: React.FC = () => {
   const [employees, setEmployees] = useState<IEmployee[]>([]);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
   
- useEffect(() => {
-  setEmployees(createMockEmployees(5));
-}, []);
+  // Fetch employees from API
+  const fetchEmployees = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/owner/employee`,
+        {
+          withCredentials: true
+        }
+      );
+      
+      console.log("API Response:", response.data); // Debug log
+      
+      if (response.data && response.data.data) {
+        // Transform API response to match IEmployee interface
+        const transformedEmployees = response.data.data.map((emp: any, index: number) => {
+          const info = emp.info || emp; // Handle both formats
+          
+          // Calculate total salary from salary structure
+          let totalSalary = 0;
+          if (emp.salary_structure?.Earnings) {
+            const earnings = emp.salary_structure.Earnings;
+            totalSalary = Object.values(earnings).reduce((sum: number, val: any) => {
+              return sum + (parseFloat(val) || 0);
+            }, 0);
+          }
+          
+          // Get employment type from attributes
+          const employmentType = emp.attributes?.find((attr: any) => 
+            attr.attribute_key === 'employment_type'
+          )?.attribute_value || 'Full-Time';
+          
+          // Get work location from attributes
+          const workLocation = emp.attributes?.find((attr: any) => 
+            attr.attribute_key === 'work_location'
+          )?.attribute_value || 'Not specified';
+          
+          return {
+            // Basic info
+            employeeId: info.employee_id?.toString() || index.toString(),
+            employeeCode: info.employee_code || `EMP${info.employee_id || index}`,
+            firstName: info.first_name || info.firstName || '',
+            lastName: info.last_name || info.lastName || '',
+            email: info.email || '',
+            phoneNumber: info.phone || info.phoneNumber || '',
+            designation: info.designation || '',
+            dateOfJoining: info.date_of_joining || info.dateOfJoining || '',
+            
+            // Role information
+            roleId: 0, // Not in current API response
+            roleName: info.designation || 'Employee',
+            
+            // Department information
+            departmentId: 0, // Not in current API response
+            departmentName: info.department || 'Not assigned',
+            
+            // Work location
+            workLocationId: 0,
+            workLocationName: workLocation,
+            
+            // Work type from attributes
+            workType: employmentType as any,
+            
+            // Employment status (assuming all are active since no is_active field)
+            employmentStatus: "Active",
+            attendanceType: "Biometric", // Default
+            status: "Active",
+            
+            // Address (not in current API)
+            presentAddress: {
+              addressLine1: "",
+              city: "",
+              state: "",
+              country: "",
+              zipCode: ""
+            },
+            
+            // Emergency contact (not in current API)
+            emergencyContactName: "",
+            emergencyContactRelation: "",
+            emergencyContactPhone: "",
+            
+            // Documents
+            documents: [],
+            
+            // Salary information
+            costToCompany: totalSalary,
+            payFrequency: "Monthly", // Default
+            
+            // System access
+            systemUserEnabled: !!info.username,
+            username: info.username || '',
+            
+            // Attendance summary (calculated)
+            attendanceSummary: {
+              present: Math.floor(Math.random() * 22), // Mock data
+              absent: Math.floor(Math.random() * 5),
+              leave: Math.floor(Math.random() * 3),
+              holiday: Math.floor(Math.random() * 2),
+              workingDays: 22,
+              totalDays: 30,
+              percentage: Math.floor(Math.random() * 30 + 70),
+              lateArrivals: Math.floor(Math.random() * 5),
+              earlyDepartures: Math.floor(Math.random() * 3),
+              overtimeHours: Math.floor(Math.random() * 10),
+              regularHours: 176,
+              averageHoursPerDay: 8.0
+            },
+            
+            // Additional fields
+            sameAsPresentAddress: true,
+            createdAt: info.created_at || new Date().toISOString(),
+            updatedAt: info.updated_at || new Date().toISOString(),
+            createdBy: "System",
+            updatedBy: "System",
+            
+            // Include raw data for reference
+            _rawData: emp
+          };
+        });
+        
+        console.log("Transformed employees:", transformedEmployees); // Debug log
+        setEmployees(transformedEmployees);
+      }
+    } catch (error: any) {
+      console.error("Error fetching employees:", error);
+      
+      if (error.response?.status === 401) {
+        router.push("/");
+        return;
+      }
+      
+      setError(error.response?.data?.message || "Failed to load employees");
+      toast.error(error.response?.data?.message || "Failed to load employees");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  useEffect(() => {
+    const checkAuth = async () => {
+      const isAuth = await isAuthenticated();
+      if (!isAuth) {
+        router.push("/");
+        return;
+      }
+      fetchEmployees();
+    };
+    checkAuth();
+  }, []);
 
   const handleAddEmployee = () => {
-    window.location.href = "/owner/employees/add-employee";
+    router.push("/owner/employees/add-employee");
   };
 
   const handleBulkImport = () => {
     setImportModalOpen(true);
   };
 
-  const handleExportEmployees = () => {
-    // Export functionality
-    console.log("Exporting employees...");
+  const handleExportEmployees = async () => {
+    try {
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/owner/employee/export`,
+        {
+          withCredentials: true,
+          responseType: 'blob'
+        }
+      );
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `employees_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      
+      toast.success("Export started successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export employees");
+    }
   };
 
   const handleSearch = (query: string) => {
@@ -61,6 +233,75 @@ const EmployeeMainArea: React.FC = () => {
     
     return matchesSearch && matchesStatus;
   });
+
+  // Handle delete employee
+  const handleDeleteEmployee = async (employeeId: string) => {
+    if (!confirm("Are you sure you want to delete this employee?")) return;
+    
+    try {
+      const response = await axios.delete(
+        `${process.env.NEXT_PUBLIC_API_URL}/owner/employee/${employeeId}`,
+        { withCredentials: true }
+      );
+      
+      if (response.data.success) {
+        toast.success("Employee deleted successfully!");
+        fetchEmployees(); // Refresh the list
+      }
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      toast.error(error.response?.data?.message || "Failed to delete employee");
+    }
+  };
+
+  // Handle status change
+  const handleStatusChange = async (employeeId: string, status: string) => {
+    try {
+      const response = await axios.put(
+        `${process.env.NEXT_PUBLIC_API_URL}/owner/employee/${employeeId}/status`,
+        { status },
+        { withCredentials: true }
+      );
+      
+      if (response.data.success) {
+        toast.success("Employee status updated!");
+        fetchEmployees(); // Refresh the list
+      }
+    } catch (error: any) {
+      console.error("Status change error:", error);
+      toast.error(error.response?.data?.message || "Failed to update status");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="app__slide-wrapper">
+        <div className="flex justify-center items-center h-64">
+          <div className="text-center">
+            <CircularProgress />
+            <p className="mt-2 text-gray-600">Loading employees...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="app__slide-wrapper">
+        <Alert severity="error" className="mb-4">
+          <Typography variant="h6">Error loading employees</Typography>
+          <Typography>{error}</Typography>
+          <button
+            onClick={fetchEmployees}
+            className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="app__slide-wrapper">
@@ -131,8 +372,6 @@ const EmployeeMainArea: React.FC = () => {
             </Typography>
           </Box>
         </Box>
-        
-
       </Box>
 
       {/* Summary Cards */}
@@ -179,12 +418,12 @@ const EmployeeMainArea: React.FC = () => {
             Active
           </Button>
           <Button
-            variant={statusFilter === "On Probation" ? "contained" : "outlined"}
+            variant={statusFilter === "Inactive" ? "contained" : "outlined"}
             size="small"
-            color="warning"
-            onClick={() => handleStatusFilter("On Probation")}
+            color="error"
+            onClick={() => handleStatusFilter("Inactive")}
           >
-            Probation
+            Inactive
           </Button>
         </Box>
       </Box>
@@ -193,18 +432,10 @@ const EmployeeMainArea: React.FC = () => {
       <EmployeeTable
         data={filteredEmployees}
         onEdit={(employee) => {
-          window.location.href = `/owner/employees/update-employee/${employee.employeeId}`;
+          router.push(`/owner/employees/edit-employee/${employee.employeeId}`);
         }}
-        onDelete={(id) => {
-          setEmployees(prev => prev.filter(emp => emp.employeeId !== id));
-        }}
-        onStatusChange={(id, status) => {
-          setEmployees(prev => prev.map(emp => 
-            emp.employeeId === id 
-              ? { ...emp, employmentStatus: status as any, updatedAt: new Date().toISOString() } 
-              : emp
-          ));
-        }}
+        onDelete={handleDeleteEmployee}
+        onStatusChange={handleStatusChange}
       />
 
       {/* Info Alert */}
@@ -215,10 +446,15 @@ const EmployeeMainArea: React.FC = () => {
       </Alert>
 
       {/* Bulk Import Modal */}
-      <BulkImportModal
+      {/* <BulkImportModal
         open={importModalOpen}
         employees={employees}
-      />
+        onClose={() => setImportModalOpen(false)}
+        onImportComplete={() => {
+          setImportModalOpen(false);
+          fetchEmployees(); // Refresh the list after import
+        }}
+      /> */}
     </div>
   );
 };

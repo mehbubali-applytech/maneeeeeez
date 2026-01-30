@@ -3,7 +3,13 @@ import Wrapper from "@/components/layouts/DefaultWrapper";
 import React from "react";
 import AddEditEmployee from "@/components/pagesUI/owner/employees/UpdateEmployeeModal";
 
-const AllCompaniesPage = () => {
+interface EditEmployeePageProps {
+  params: {
+    id: string;
+  };
+}
+
+export default function EditEmployeePage({ params }: EditEmployeePageProps)  {
   return (
     <>
       <MetaData pageTitle="Update Employees">
@@ -15,4 +21,3 @@ const AllCompaniesPage = () => {
   );
 };
 
-export default AllCompaniesPage;

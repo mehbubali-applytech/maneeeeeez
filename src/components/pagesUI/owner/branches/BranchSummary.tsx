@@ -8,12 +8,18 @@ interface Props {
 
 const BranchSummary: React.FC<Props> = ({ branches }) => {
   const totalBranches = branches.length;
-  const activeBranches = branches.filter((b) => b.status === "Active").length;
-  const inactiveBranches = branches.filter((b) => b.status === "Inactive").length;
-  const closedBranches = branches.filter((b) => b.status === "Closed").length;
+  const activeBranches = branches.filter((b) => 
+    b.is_active === "Active" || b.status === "Active"
+  ).length;
+  const inactiveBranches = branches.filter((b) => 
+    b.is_active === "Inactive" || b.status === "Inactive"
+  ).length;
+  const closedBranches = branches.filter((b) => 
+    b.is_active === "Closed" || b.status === "Closed"
+  ).length;
 
   const totalEmployees = branches.reduce(
-    (sum, b) => sum + (b.totalEmployees || 0),
+    (sum, b) => sum + (b.total_employees || b.totalEmployees || 0),
     0
   );
 

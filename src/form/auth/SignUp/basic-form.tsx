@@ -34,15 +34,17 @@ const SignUpBasicForm = () => {
     const onSubmit = async (data: ISignUpForm) => {
         try {
             console.log("Form Data Submitted:", data);
-            const response = await axios.post("https://payroll-baas.onrender.com/api/auth/login", data);
+            const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, data, {
+                withCredentials: true,
+            });
             toast.success("Sign Up successfully");
-            console.log("Server Response:", response.data);
-            localStorage.setItem("token", response.data.data.token);
-            localStorage.setItem("designation", response.data.data.employee.info.designation);
+            console.log("Server Response:", response.data.data.user.role);
+            // localStorage.setItem("token", response.data.data.token);
+            localStorage.setItem("designation", response.data.data.user.role);
 
-            if (response.data.data.employee.info.designation === "Super Administrator") {
+            if (response.data.data.user.role === "Super Administrator") {
                 router.push("/super-admin");
-            } else if (response.data.data.employee.info.designation === "Project Manager") {
+            } else if (response.data.data.user.role === "Owner") {
                 router.push("/owner");
             }
         } catch (error: unknown) {
@@ -60,19 +62,19 @@ const SignUpBasicForm = () => {
 
     return (
         <form onSubmit={handleSubmit(onSubmit)}>
-            {/* Username */}
+            {/* Email */}
             <div className="from__input-box">
                 <div className="form__input-title">
-                    <label htmlFor="nameEmail">Username</label>
+                    <label htmlFor="nameEmail">Email</label>
                 </div>
                 <div className="form__input">
                     <input
                         className="form-control"
                         id="nameEmail"
-                        type="text"
-                        {...register("username", { required: "Username is required" })}
+                        type="email"
+                        {...register("email", { required: "Email is required" })}
                     />
-                    <ErrorMessage error={errors.username} />
+                    <ErrorMessage error={errors.email} />
                 </div>
             </div>
 

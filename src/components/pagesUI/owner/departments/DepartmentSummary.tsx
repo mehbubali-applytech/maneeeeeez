@@ -1,49 +1,55 @@
 import React from "react";
 import SummarySingleCard from "@/components/common/SummarySingleCard";
 
-const DepartmentSummary: React.FC = () => {
-  const departmentData = [
+interface Props {
+  summaryData: {
+    totalDepartments: number;
+    activeDepartments: number;
+    inactiveDepartments: number;
+    parentDepartments: number;
+    hierarchyDepth: number;
+  };
+}
+
+const DepartmentSummary: React.FC<Props> = ({ summaryData }) => {
+  const summaryCards = [
     {
       iconClass: "fa-light fa-building",
       title: "Total Departments",
-      value: "12",
-      description: "",
-      percentageChange: "",
+      value: summaryData.totalDepartments.toString(),
       isIncrease: true,
     },
     {
       iconClass: "fa-light fa-user-tie",
       title: "Active Departments",
-      value: "9",
-      description: "",
-      percentageChange: "",
+      value: summaryData.activeDepartments.toString(),
       isIncrease: true,
     },
     {
       iconClass: "fa-light fa-user-slash",
       title: "Inactive Departments",
-      value: "3",
-      description: "",
-      percentageChange: "",
+      value: summaryData.inactiveDepartments.toString(),
       isIncrease: false,
     },
     {
-      iconClass: "fa-light fa-users",
-      title: "Total Employees",
-      value: "256",
-      description: "",
-      percentageChange: "",
+      iconClass: "fa-light fa-sitemap",
+      title: "Parent Departments",
+      value: summaryData.parentDepartments.toString(),
       isIncrease: true,
+    },
+    {
+      iconClass: "fa-light fa-layer-group",
+      title: "Hierarchy Depth",
+      value: summaryData.hierarchyDepth.toString(),
+      isIncrease: false,
+      suffix: " levels",
     },
   ];
 
   return (
     <>
-      {departmentData.map((item, index) => (
-        <div
-          key={index}
-          className="col-span-12 sm:col-span-6 xxl:col-span-3"
-        >
+      {summaryCards.map((item, index) => (
+        <div key={index} className="col-span-12 sm:col-span-6 xxl:col-span-3">
           <SummarySingleCard {...item} />
         </div>
       ))}

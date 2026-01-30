@@ -1,4 +1,3 @@
-// tabs/JobDetailsTab.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -19,7 +18,8 @@ import {
   FormLabel,
   Alert,
   Paper,
-  AlertColor
+  AlertColor,
+  CircularProgress
 } from "@mui/material";
 import {
   Work,
@@ -36,79 +36,72 @@ import { EMPLOYMENT_STATUS_OPTIONS } from "../EmployeeTypes";
 
 interface JobDetailsTabProps {
   watchWorkType: string;
+  departments?: any[];
+  designations?: any[];
+  branches?: any[];
+  isLoading?: boolean;
 }
 
-// Mock data (would come from API in real app)
-const ROLES = [
-  { id: 1, name: "Software Engineer" },
-  { id: 2, name: "Senior Software Engineer" },
-  { id: 3, name: "Team Lead" },
-  { id: 4, name: "Project Manager" },
-  { id: 5, name: "HR Manager" },
-  { id: 6, name: "Accountant" },
-  { id: 7, name: "Sales Executive" },
-  { id: 8, name: "Marketing Specialist" }
-];
-
-const DEPARTMENTS = [
-  { id: 1, name: "Engineering" },
-  { id: 2, name: "Human Resources" },
-  { id: 3, name: "Finance" },
-  { id: 4, name: "Sales" },
-  { id: 5, name: "Marketing" },
-  { id: 6, name: "Operations" },
-  { id: 7, name: "Customer Support" }
-];
-
-const WORK_LOCATIONS = [
-  { id: 1, name: "Mumbai HQ" },
-  { id: 2, name: "Delhi Corporate Office" },
-  { id: 3, name: "Bangalore Branch" },
-  { id: 4, name: "Hyderabad Operations" },
-  { id: 5, name: "Chennai Branch" },
-  { id: 6, name: "Pune Support Center" }
-];
-
-const SHIFTS = [
-  { id: 1, name: "Morning Shift", timing: "9:00 - 18:00" },
-  { id: 2, name: "Evening Shift", timing: "14:00 - 23:00" },
-  { id: 3, name: "Night Shift", timing: "21:00 - 6:00" },
-  { id: 4, name: "Flexi Shift", timing: "10:00 - 19:00" }
-];
-
-const EMPLOYEES = [
-  { id: "EMP001", name: "Rajesh Kumar", role: "Senior Software Engineer" },
-  { id: "EMP002", name: "Priya Sharma", role: "Project Manager" },
-  { id: "EMP003", name: "Amit Patel", role: "Team Lead" },
-  { id: "EMP004", name: "Sneha Reddy", role: "HR Manager" }
-];
-
-const JobDetailsTab: React.FC<JobDetailsTabProps> = ({ watchWorkType }) => {
+const JobDetailsTab: React.FC<JobDetailsTabProps> = ({
+  watchWorkType,
+  departments = [],
+  designations = [],
+  branches = [],
+  isLoading = false
+}) => {
   const {
     control,
     watch,
     setValue,
     register,
+    trigger,
     formState: { errors }
   } = useFormContext();
 
   const [probationEnabled, setProbationEnabled] = useState(false);
+  const [reportingManagers, setReportingManagers] = useState<any[]>([]);
 
   const dateOfJoining = watch('dateOfJoining');
   const employmentStatus = watch('employmentStatus');
+  const departmentId = watch('departmentId');
 
-useEffect(() => {
-  if (watchWorkType === 'Contract' && dateOfJoining) {
-    setValue('contractStartDate', dateOfJoining, { shouldDirty: false });
+  // Fetch reporting managers based on department
+  useEffect(() => {
+    const fetchReportingManagers = async () => {
+      if (departmentId) {
+        try {
+          // You'll need to create this API endpoint
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/owner/employee/department/${departmentId}/managers`,
+            {
+              credentials: 'include'
+            }
+          );
+          const data = await response.json();
+          if (data.success) {
+            setReportingManagers(data.data);
+          }
+        } catch (error) {
+          console.error("Error fetching reporting managers:", error);
+        }
+      }
+    };
 
-    setValue('contractEndDate', (prev: any) => {
-      if (prev) return prev;
-      const end = new Date(dateOfJoining);
-      end.setFullYear(end.getFullYear() + 1);
-      return end.toISOString().split('T')[0];
-    });
-  }
-}, [watchWorkType, dateOfJoining, setValue]);
+    fetchReportingManagers();
+  }, [departmentId]);
+
+  useEffect(() => {
+    if (watchWorkType === 'Contract' && dateOfJoining) {
+      setValue('contractStartDate', dateOfJoining, { shouldDirty: false });
+
+      setValue('contractEndDate', (prev: any) => {
+        if (prev) return prev;
+        const end = new Date(dateOfJoining);
+        end.setFullYear(end.getFullYear() + 1);
+        return end.toISOString().split('T')[0];
+      });
+    }
+  }, [watchWorkType, dateOfJoining, setValue]);
 
   const handleProbationToggle = (enabled: boolean) => {
     setProbationEnabled(enabled);
@@ -134,6 +127,14 @@ useEffect(() => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" height={200}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <Typography variant="h6" gutterBottom sx={{
@@ -149,14 +150,6 @@ useEffect(() => {
         {/* Left Column */}
         <Grid item xs={12} md={6}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <InputField
-              label="Employee Code"
-              id="employeeCode"
-              type="text"
-              required={false}
-              register={register("employeeCode")}
-            />
-
             {/* Date of Joining */}
             <InputField
               label="Date of Joining *"
@@ -196,41 +189,6 @@ useEffect(() => {
               )}
             </Box>
 
-            {/* Role Selection */}
-            <Box>
-              <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-                <Work sx={{ mr: 1 }} />
-                Role / Designation *
-              </Typography>
-              <Controller
-                name="roleId"
-                control={control}
-                rules={{ required: "Role is required" }}
-                render={({ field, fieldState }) => (
-                  <Autocomplete
-                    options={ROLES}
-                    getOptionLabel={(option) => option.name}
-                    value={ROLES.find(role => role.id === field.value) || null}
-                    onChange={(_, value) => field.onChange(value?.id || '')}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        size="small"
-                        placeholder="Select a role"
-                        error={fieldState.invalid}
-                        helperText={fieldState.error?.message}
-                      />
-                    )}
-                    renderOption={(props, option) => (
-                      <MenuItem {...props} key={option.id}>
-                        {option.name}
-                      </MenuItem>
-                    )}
-                  />
-                )}
-              />
-            </Box>
-
             {/* Department */}
             <Box>
               <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
@@ -243,10 +201,10 @@ useEffect(() => {
                 rules={{ required: "Department is required" }}
                 render={({ field, fieldState }) => (
                   <Autocomplete
-                    options={DEPARTMENTS}
-                    getOptionLabel={(option) => option.name}
-                    value={DEPARTMENTS.find(dept => dept.id === field.value) || null}
-                    onChange={(_, value) => field.onChange(value?.id || '')}
+                    options={departments}
+                    getOptionLabel={(option) => option.dept_name}
+                    value={departments.find(dept => dept.dept_id === field.value) || null}
+                    onChange={(_, value) => field.onChange(value?.dept_id || '')}
                     renderInput={(params) => (
                       <TextField
                         {...params}
@@ -257,9 +215,41 @@ useEffect(() => {
                       />
                     )}
                     renderOption={(props, option) => (
-                      <MenuItem {...props} key={option.id}>
-                        {option.name}
+                      <MenuItem {...props} key={option.dept_id}>
+                        {option.dept_name}
                       </MenuItem>
+                    )}
+                    loading={isLoading}
+                  />
+                )}
+              />
+            </Box>
+
+            {/* Designation */}
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                <Work sx={{ mr: 1 }} />
+                Designation *
+              </Typography>
+              <Controller
+                name="designation"
+                control={control}
+                rules={{ required: "Designation is required" }}
+                render={({ field, fieldState }) => (
+                  <Autocomplete
+                    freeSolo
+                    options={designations.map(d => d.designation_name)}
+                    value={field.value || ''}
+                    onChange={(_, value) => field.onChange(value || '')}
+                    onInputChange={(_, value) => field.onChange(value)}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        size="small"
+                        placeholder="Enter or select designation"
+                        error={fieldState.invalid}
+                        helperText={fieldState.error?.message}
+                      />
                     )}
                   />
                 )}
@@ -277,10 +267,10 @@ useEffect(() => {
                 control={control}
                 render={({ field }) => (
                   <Autocomplete
-                    options={EMPLOYEES}
-                    getOptionLabel={(option) => `${option.name} - ${option.role}`}
-                    value={EMPLOYEES.find(emp => emp.id === field.value) || null}
-                    onChange={(_, value) => field.onChange(value?.id || '')}
+                    options={reportingManagers}
+                    getOptionLabel={(option) => `${option.first_name} ${option.last_name} (${option.employee_code})`}
+                    value={reportingManagers.find(emp => emp.employee_id === field.value) || null}
+                    onChange={(_, value) => field.onChange(value?.employee_id || '')}
                     renderInput={(params) => (
                       <TextField
                         {...params}
@@ -289,15 +279,18 @@ useEffect(() => {
                       />
                     )}
                     renderOption={(props, option) => (
-                      <MenuItem {...props} key={option.id}>
+                      <MenuItem {...props} key={option.employee_id}>
                         <Box>
-                          <Typography variant="body2">{option.name}</Typography>
+                          <Typography variant="body2">
+                            {option.first_name} {option.last_name}
+                          </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {option.role}
+                            {option.designation} • {option.employee_code}
                           </Typography>
                         </Box>
                       </MenuItem>
                     )}
+                    disabled={!departmentId}
                   />
                 )}
               />
@@ -308,11 +301,11 @@ useEffect(() => {
         {/* Right Column */}
         <Grid item xs={12} md={6}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {/* Work Location */}
+            {/* Branch/Work Location */}
             <Box>
               <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
                 <LocationOn sx={{ mr: 1 }} />
-                Work Location / Office *
+                Branch / Work Location *
               </Typography>
               <Controller
                 name="workLocationId"
@@ -320,10 +313,10 @@ useEffect(() => {
                 rules={{ required: "Work location is required" }}
                 render={({ field, fieldState }) => (
                   <Autocomplete
-                    options={WORK_LOCATIONS}
-                    getOptionLabel={(option) => option.name}
-                    value={WORK_LOCATIONS.find(location => location.id === field.value) || null}
-                    onChange={(_, value) => field.onChange(value?.id || '')}
+                    options={branches}
+                    getOptionLabel={(option) => option.branch_name}
+                    value={branches.find(branch => branch.branch_id === field.value) || null}
+                    onChange={(_, value) => field.onChange(value?.branch_id || '')}
                     renderInput={(params) => (
                       <TextField
                         {...params}
@@ -334,48 +327,15 @@ useEffect(() => {
                       />
                     )}
                     renderOption={(props, option) => (
-                      <MenuItem {...props} key={option.id}>
-                        {option.name}
-                      </MenuItem>
-                    )}
-                  />
-                )}
-              />
-            </Box>
-
-            {/* Assigned Shift */}
-            <Box>
-              <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-                <AccessTime sx={{ mr: 1 }} />
-                Assigned Shift
-              </Typography>
-              <Controller
-                name="shiftId"
-                control={control}
-                render={({ field }) => (
-                  <Autocomplete
-                    options={SHIFTS}
-                    getOptionLabel={(option) => option.name}
-                    value={SHIFTS.find(shift => shift.id === field.value) || null}
-                    onChange={(_, value) => field.onChange(value?.id || '')}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        size="small"
-                        placeholder="Select shift"
-                      />
-                    )}
-                    renderOption={(props, option) => (
-                      <MenuItem {...props} key={option.id}>
+                      <MenuItem {...props} key={option.branch_id}>
                         <Box>
-                          <Typography variant="body2">{option.name}</Typography>
+                          <Typography variant="body2">{option.branch_name}</Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {option.timing}
+                            {option.address}
                           </Typography>
                         </Box>
                       </MenuItem>
                     )}
-                    noOptionsText="No shifts available"
                   />
                 )}
               />
@@ -383,7 +343,7 @@ useEffect(() => {
 
             {/* Work Type */}
             <Box>
-              <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+              <Typography variant="subtitle2" gutterBottom>
                 Work Type *
               </Typography>
               <Controller
@@ -502,41 +462,6 @@ useEffect(() => {
                 </Alert>
               )}
             </Box>
-
-            {/* Summary Card */}
-            <Paper variant="outlined" sx={{ p: 2, mt: 2, bgcolor: 'grey.50' }}>
-              <Typography variant="subtitle2" gutterBottom>
-                Job Summary
-              </Typography>
-              <Grid container spacing={1}>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">
-                    Employment Type:
-                  </Typography>
-                  <Typography variant="body2">
-                    {watch('workType') || 'Not set'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">
-                    Status:
-                  </Typography>
-                  <Typography variant="body2">
-                    {watch('employmentStatus') || 'Not set'}
-                  </Typography>
-                </Grid>
-                {watch('dateOfJoining') && (
-                  <Grid item xs={12}>
-                    <Typography variant="caption" color="text.secondary">
-                      Joining Date:
-                    </Typography>
-                    <Typography variant="body2">
-                      {new Date(watch('dateOfJoining')).toLocaleDateString()}
-                    </Typography>
-                  </Grid>
-                )}
-              </Grid>
-            </Paper>
           </Box>
         </Grid>
       </Grid>

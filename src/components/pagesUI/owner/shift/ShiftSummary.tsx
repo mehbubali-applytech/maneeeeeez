@@ -1,4 +1,3 @@
-// ShiftSummary.tsx
 "use client";
 
 import React from "react";
@@ -11,14 +10,21 @@ interface ShiftSummaryProps {
 
 const ShiftSummary: React.FC<ShiftSummaryProps> = ({ shifts }) => {
   const totalShifts = shifts.length;
-  const activeShifts = shifts.filter((s) => s.activeStatus).length;
-  const inactiveShifts = shifts.filter((s) => !s.activeStatus).length;
-  const nightShifts = shifts.filter((s) => s.isNightShift).length;
+  const activeShifts = shifts.filter((s) => s.active_status).length;
+  const nightShifts = shifts.filter((s) => s.is_night_shift).length;
   
   const assignedEmployees = shifts.reduce(
-    (sum, s) => sum + (s.assignedEmployees || 0),
+    (sum, s) => sum + (s.assigned_employees || 0),
     0
   );
+
+  // Get unique branches across all shifts
+  const uniqueBranches = new Set<number>();
+  shifts.forEach(shift => {
+    shift.Branches?.forEach(branch => {
+      uniqueBranches.add(branch.branch_id);
+    });
+  });
 
   const summaryData = [
     {
@@ -55,8 +61,8 @@ const ShiftSummary: React.FC<ShiftSummaryProps> = ({ shifts }) => {
     },
     {
       iconClass: "fa-light fa-building",
-      title: "Active Locations",
-      value: "10",
+      title: "Branches Covered",
+      value: uniqueBranches.size.toString(),
       description: "",
       percentageChange: "",
       isIncrease: true,

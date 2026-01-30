@@ -1,387 +1,487 @@
 "use client";
 
 import Link from "next/link";
-import React, { useState } from "react";
-import { 
-  FormControlLabel, 
+import React, { useEffect, useState } from "react";
+import {
+  FormControlLabel,
   Switch,
-  Autocomplete,
-  TextField
+  TextField,
+  IconButton,
+  Button,
+  Card,
+  CardContent,
+  Grid,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+  Box,
+  Alert,
+  Divider,
+  Chip,
 } from "@mui/material";
-import { useForm, Controller } from "react-hook-form";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 
-import { IDepartment } from "../DepartmentTypes";
-import InputField from "@/components/elements/SharedInputs/InputField";
+import { DepartmentFormData, SubDepartmentFormData } from "../DepartmentTypes";
+import { isAuthenticated } from "@/app/helpers/authChecker";
 
-const AddDeptMainArea: React.FC = () => {
-    const router = useRouter();
-    const [status, setStatus] = useState<boolean>(true);
+const AddDeptMainArea = () => {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [hasSubDepartments, setHasSubDepartments] = useState<boolean>(false);
+  const [status, setStatus] = useState<boolean>(true); // Separate state for parent status
 
-    const {
-        register,
-        handleSubmit,
-        control,
-        formState: { errors },
-    } = useForm<IDepartment>();
+  const {
+    register,
+    control,
+    handleSubmit,
+    formState: { errors },
+    watch,
+    setValue,
+  } = useForm<DepartmentFormData>({
+    defaultValues: {
+      dept_name: "",
+      status: "1",
+      is_parent: 0,
+      sub_departments: [{ dept_name: "", status: "1" }],
+    },
+  });
 
-    const departmentList = [
-        {
-            id: 1,
-            name: "HR",
-            departmentCode: "HR01",
-            subDepartments: [
-                { id: 3, name: "Recruitment", departmentCode: "HR01-1" },
-                { id: 4, name: "Employee Relations", departmentCode: "HR01-2" },
-            ],
-        },
-        {
-            id: 2,
-            name: "IT",
-            departmentCode: "IT01",
-            subDepartments: [
-                { id: 5, name: "Infrastructure", departmentCode: "IT01-1" },
-                { id: 6, name: "Software Development", departmentCode: "IT01-2" },
-            ],
-        },
-        {
-            id: 7,
-            name: "Finance",
-            departmentCode: "FIN01",
-            subDepartments: [
-                { id: 8, name: "Accounts Payable", departmentCode: "FIN01-1" },
-                { id: 9, name: "Accounts Receivable", departmentCode: "FIN01-2" },
-            ],
-        },
-        {
-            id: 10,
-            name: "Marketing",
-            departmentCode: "MKT01",
-            subDepartments: [
-                { id: 11, name: "Digital Marketing", departmentCode: "MKT01-1" },
-                { id: 12, name: "Content Creation", departmentCode: "MKT01-2" },
-            ],
-        },
-    ];
-
-    // Flatten departments + sub-departments for autocomplete
-    const autocompleteOptions = [
-        ...departmentList.map((dep) => ({
-            id: dep.id,
-            label: `${dep.name} (${dep.departmentCode})`,
-            isMain: true,
-            originalName: dep.name,
-        })),
-        ...departmentList.flatMap(dep =>
-            dep.subDepartments.map(sub => ({
-                id: sub.id,
-                label: `${dep.name} → ${sub.name} (${sub.departmentCode})`,
-                isMain: false,
-                parentName: dep.name,
-                originalName: sub.name,
-            }))
-        )
-    ];
-
-    const handleStatusChange = (
-        event: React.ChangeEvent<HTMLInputElement>
-    ) => {
-        setStatus(event.target.checked);
+  useEffect(() => {
+    const checkAuth = async () => {
+      const isAuth = await isAuthenticated();
+      if (!isAuth) {
+        router.push("/");
+      }
     };
+    checkAuth();
+  }, [])
 
-    const onSubmit = (data: IDepartment) => {
-        const payload: IDepartment = {
-            ...data,
-            id: Date.now(),
-            created_at: new Date().toISOString(),
-            status: status ? "Active" : "Inactive",
-        };
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "sub_departments",
+  });
 
-        console.log("Payload:", payload);
+  const handleParentStatusChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newStatus = event.target.checked;
+    setStatus(newStatus);
+    setValue("status", newStatus ? "1" : "0");
+  };
 
-        toast.success("Department added successfully!");
+  const addSubDepartment = () => {
+    append({ dept_name: "", status: "1" });
+  };
+
+  const removeSubDepartment = (index: number) => {
+    if (fields.length > 1) {
+      remove(index);
+    }
+  };
+
+  const onSubmit = async (data: DepartmentFormData) => {
+    try {
+      setIsSubmitting(true);
+
+      // Filter out empty sub-departments
+      const validSubDepartments = hasSubDepartments
+        ? data.sub_departments?.filter(
+          (sd) => sd.dept_name && sd.dept_name.trim() !== ""
+        ) || []
+        : [];
+
+      const payload = {
+        dept_name: data.dept_name,
+        status: status ? "1" : "0", // Use the state value
+        sub_departments: validSubDepartments,
+      };
+
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/owner/department`,
+        payload,
+        {
+          withCredentials: true,
+        }
+      );
+
+      if (response.status === 201) {
+        toast.success("Department created successfully!");
         setTimeout(() => {
-            router.push("/owner/departments");
+          router.push("/owner/departments");
         }, 500);
-    };
+      } else {
+        throw new Error(
+          response.data.message || "Failed to create department"
+        );
+      }
+    } catch (error: any) {
 
-    return (
-        <div className="app__slide-wrapper">
-            {/* Breadcrumb */}
-            <div className="breadcrumb__wrapper mb-[25px]">
-                <nav>
-                    <ol className="breadcrumb flex items-center mb-0">
-                        <li className="breadcrumb-item">
-                            <Link href="/">Home</Link>
-                        </li>
-                        <li className="breadcrumb-item">
-                            <Link href="/owner">Owner</Link>
-                        </li>
-                        <li className="breadcrumb-item active">Add Department</li>
-                    </ol>
-                </nav>
-            </div>
+      if (error.response?.status === 401) {
+        router.push("/");
+        return;
+      }
+      console.error("Error creating department:", error);
 
-            {/* Header */}
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold text-gray-800">Add New Department</h1>
-                <p className="text-gray-600 mt-2">Create a new department or sub-department in your organization</p>
-            </div>
+      let errorMessage = "Failed to create department";
+      if (error.response?.data) {
+        if (typeof error.response.data === "string") {
+          errorMessage = error.response.data;
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
 
-            {/* Form Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                {/* Card Header */}
-                <div className="px-8 py-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-                    <div className="flex items-center">
-                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mr-4">
-                            <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-semibold text-gray-800">Department Details</h2>
-                            <p className="text-gray-600 text-sm">Enter department information carefully</p>
-                        </div>
-                    </div>
-                </div>
+      toast.error(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-                {/* Form */}
-                <form onSubmit={handleSubmit(onSubmit)}>
-                    <div className="p-8">
-                        <div className="grid grid-cols-12 gap-6">
-                            {/* Department Name */}
-                            <div className="col-span-12 lg:col-span-6">
-                                <InputField
-                                    id="name"
-                                    label="Department Name"
-                                    required
-                                    register={register("name", {
-                                        required: "Department name is required"
-                                    })}
+  return (
+    <div className="app__slide-wrapper">
+      {/* Breadcrumb */}
+      <div className="breadcrumb__wrapper mb-[25px]">
+        <nav>
+          <ol className="breadcrumb flex items-center mb-0">
+            <li className="breadcrumb-item">
+              <Link href="/">Home</Link>
+            </li>
+            <li className="breadcrumb-item">
+              <Link href="/owner">Owner</Link>
+            </li>
+            <li className="breadcrumb-item">
+              <Link href="/owner/departments">Departments</Link>
+            </li>
+            <li className="breadcrumb-item active">Add Department</li>
+          </ol>
+        </nav>
+      </div>
+
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-800">
+          Add New Department
+        </h1>
+        <p className="text-gray-600 mt-2">
+          Create a new department with optional sub-departments
+        </p>
+      </div>
+
+      {/* Form Card */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <Grid container spacing={3}>
+              {/* Main Department Section */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom sx={{ color: "primary.main" }}>
+                  Main Department
+                </Typography>
+                <Divider sx={{ mb: 3 }} />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Department Name"
+                  {...register("dept_name", {
+                    required: "Department name is required",
+                    minLength: {
+                      value: 2,
+                      message: "Department name must be at least 2 characters",
+                    },
+                  })}
+                  error={!!errors.dept_name}
+                  helperText={errors.dept_name?.message}
+                  disabled={isSubmitting}
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    p: 2,
+                    bgcolor: "background.default",
+                    borderRadius: 1,
+                    border: "1px solid",
+                    borderColor: "divider",
+                  }}
+                >
+                  <Box>
+                    <Typography variant="body1" fontWeight="medium">
+                      Status
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {status ? "Active" : "Inactive"}
+                    </Typography>
+                  </Box>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={status}
+                        onChange={handleParentStatusChange}
+                        color="primary"
+                        disabled={isSubmitting}
+                      />
+                    }
+                    label=""
+                  />
+                </Box>
+              </Grid>
+
+              {/* Sub-Departments Section */}
+              <Grid item xs={12}>
+                <Box sx={{ mt: 3 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      mb: 2,
+                    }}
+                  >
+                    <Typography variant="h6" sx={{ color: "primary.main" }}>
+                      Sub-Departments
+                    </Typography>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Add sub-departments?
+                      </Typography>
+                      <Switch
+                        checked={hasSubDepartments}
+                        onChange={(e) => setHasSubDepartments(e.target.checked)}
+                        color="primary"
+                        disabled={isSubmitting}
+                      />
+                    </Box>
+                  </Box>
+                  <Divider sx={{ mb: 3 }} />
+
+                  {hasSubDepartments && (
+                    <TableContainer component={Paper} variant="outlined">
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow sx={{ bgcolor: "action.hover" }}>
+                            <TableCell width="60%">
+                              <Typography variant="subtitle2">
+                                Sub-Department Name
+                              </Typography>
+                            </TableCell>
+                            <TableCell width="30%">
+                              <Typography variant="subtitle2">Status</Typography>
+                            </TableCell>
+                            <TableCell width="10%" align="center">
+                              <Typography variant="subtitle2">Actions</Typography>
+                            </TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {fields.map((field, index) => (
+                            <TableRow key={field.id}>
+                              <TableCell>
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  placeholder="Enter sub-department name"
+                                  {...register(`sub_departments.${index}.dept_name` as const)}
+                                  disabled={isSubmitting}
                                 />
-                              
-                            </div>
-
-                            {/* Department Code */}
-                            <div className="col-span-12 lg:col-span-6">
-                                <InputField
-                                    id="departmentCode"
-                                    label="Department Code"
-                                    required
-                                    register={register("departmentCode", {
-                                        required: "Department code is required",
-                                    })}
-                                />
-                            
-                            </div>
-
-                            {/* Department Head */}
-                            <div className="col-span-12 lg:col-span-6">
-                                <InputField
-                                    id="head"
-                                    label="Department Head"
-                                    register={register("head")}
-                                />
-                            </div>
-
-                            {/* Parent Department - Autocomplete */}
-                            <div className="col-span-12 lg:col-span-6">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Parent Department
-                                    <span className="text-gray-500 text-sm ml-1">(Optional)</span>
-                                </label>
+                              </TableCell>
+                              <TableCell>
                                 <Controller
-                                    name="parentDepartmentId"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <Autocomplete
-                                            value={autocompleteOptions.find(option => option.id === field.value) || null}
-                                            onChange={(event, newValue) => {
-                                                field.onChange(newValue ? newValue.id : null);
-                                            }}
-                                            options={autocompleteOptions}
-                                            groupBy={(option) => option.isMain ? "Main Departments" : "Sub-Departments"}
-                                            getOptionLabel={(option) => option.label}
-                                            renderInput={(params) => (
-                                                <TextField
-                                                    {...params}
-                                                    placeholder="Search or select from list"
-                                                    size="small"
-                                                />
-                                            )}
-                                            isOptionEqualToValue={(option, value) => option.id === value.id}
-                                            fullWidth
-                                            clearOnBlur
-                                            clearOnEscape
-                                            blurOnSelect
+                                  name={`sub_departments.${index}.status`}
+                                  control={control}
+                                  defaultValue="1"
+                                  render={({ field }) => (
+                                    <FormControlLabel
+                                      control={
+                                        <Switch
+                                          checked={field.value === "1"}
+                                          onChange={(e) =>
+                                            field.onChange(e.target.checked ? "1" : "0")
+                                          }
+                                          size="small"
+                                          color="primary"
+                                          disabled={isSubmitting}
                                         />
-                                    )}
+                                      }
+                                      label={
+                                        <Typography variant="body2">
+                                          {field.value === "1" ? "Active" : "Inactive"}
+                                        </Typography>
+                                      }
+                                    />
+                                  )}
                                 />
-                                <p className="text-gray-500 text-sm mt-2">
-                                    Leave empty if this is a main department
-                                </p>
-                            </div>
 
-                            {/* Contact Information Section */}
-                            <div className="col-span-12 mt-6 mb-2">
-                                <div className="flex items-center">
-                                    <div className="w-8 h-0.5 bg-primary mr-3"></div>
-                                    <h3 className="text-lg font-medium text-gray-700">Contact Information</h3>
-                                </div>
-                            </div>
+                              </TableCell>
+                              <TableCell align="center">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => removeSubDepartment(index)}
+                                  disabled={fields.length <= 1 || isSubmitting}
+                                  color="error"
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      <Box sx={{ p: 2, borderTop: 1, borderColor: "divider" }}>
+                        <Button
+                          startIcon={<AddIcon />}
+                          onClick={addSubDepartment}
+                          disabled={isSubmitting}
+                          variant="outlined"
+                          size="small"
+                        >
+                          Add Sub-Department
+                        </Button>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ ml: 2 }}
+                        >
+                          {fields.length} sub-department(s) added
+                        </Typography>
+                      </Box>
+                    </TableContainer>
+                  )}
 
-                            {/* Phone */}
-                            <div className="col-span-12 md:col-span-6 lg:col-span-4">
-                                <InputField
-                                    id="phone"
-                                    label="Phone Number"
-                                    register={register("phone")}
-                                    type="tel"
+                  {!hasSubDepartments && (
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      No sub-departments will be created. You can enable this
+                      option if needed.
+                    </Alert>
+                  )}
+                </Box>
+              </Grid>
+              {/* Preview Section */}
+              <Grid item xs={12}>
+                <Box sx={{ mt: 3, p: 2, bgcolor: "grey.50", borderRadius: 1 }}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Preview Structure:
+                  </Typography>
+                  <Box sx={{ ml: 2 }}>
+                    <Typography variant="body2">
+                      • {watch("dept_name") || "Main Department"}
+                      <Box component="span" sx={{ ml: 1 }}>
+                        <Chip
+                          label={status ? "Active" : "Inactive"}
+                          size="small"
+                          color={status ? "success" : "default"}
+                          variant="outlined"
+                        />
+                      </Box>
+                      {hasSubDepartments && (
+                        <Box component="ul" sx={{ ml: 3, mt: 1 }}>
+                          {fields.map((field, index) => {
+                            const subDeptStatus = watch(`sub_departments.${index}.status`) === "1";
+                            return (
+                              <li key={index}>
+                                {watch(`sub_departments.${index}.dept_name`) ||
+                                  `Sub-department ${index + 1}`}
+                                <Chip
+                                  label={subDeptStatus ? "Active" : "Inactive"}
+                                  size="small"
+                                  color={subDeptStatus ? "success" : "default"}
+                                  sx={{ ml: 1 }}
                                 />
-                            </div>
+                              </li>
+                            );
+                          })}
+                        </Box>
+                      )}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
 
-                            {/* Email */}
-                            <div className="col-span-12 md:col-span-6 lg:col-span-8">
-                                <InputField
-                                    id="email"
-                                    label="Email Address"
-                                    register={register("email")}
-                                    type="email"
-                                />
-                            </div>
+              {/* Action Buttons */}
+              <Grid item xs={12}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: 2,
+                    mt: 3,
+                    pt: 2,
+                    borderTop: 1,
+                    borderColor: "divider",
+                  }}
+                >
+                  <Button
+                    variant="outlined"
+                    onClick={() => router.push("/owner/departments")}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    className="!text-white"
+                    disabled={isSubmitting}
+                    startIcon={
+                      isSubmitting ? (
+                        <Box
+                          component="span"
+                          sx={{
+                            width: 16,
+                            height: 16,
+                            border: "2px solid",
+                            borderColor: "white transparent transparent transparent",
+                            borderRadius: "50%",
+                            animation: "spin 1s linear infinite",
+                            "@keyframes spin": {
+                              "0%": { transform: "rotate(0deg)" },
+                              "100%": { transform: "rotate(360deg)" },
+                            },
+                          }}
+                        />
+                      ) : null
+                    }
+                  >
+                    {isSubmitting ? "Creating..." : "Create Department"}
+                  </Button>
+                </Box>
+              </Grid>
+            </Grid>
+          </form>
+        </CardContent>
+      </Card>
 
-                            {/* Description */}
-                            <div className="col-span-12">
-                                <InputField
-                                    id="description"
-                                    label="Description"
-                                    register={register("description")}
-                                    isTextArea={true}
-                                />
-                                <p className="text-gray-500 text-sm mt-2">
-                                    Optional: Describe the department&apos;s main functions and responsibilities
-                                </p>
-                            </div>
-
-                            {/* Status */}
-                            <div className="col-span-12 mt-6">
-                                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h4 className="font-medium text-gray-800">Department Status</h4>
-                                            <p className="text-gray-600 text-sm mt-1">
-                                                {status
-                                                    ? "This department will be active and operational"
-                                                    : "This department will be inactive and hidden"}
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center">
-                                            <span className={`mr-3 font-medium ${status ? 'text-green-600' : 'text-gray-600'}`}>
-                                                {status ? 'Active' : 'Inactive'}
-                                            </span>
-                                            <FormControlLabel
-                                                control={
-                                                    <Switch
-                                                        checked={status}
-                                                        onChange={handleStatusChange}
-                                                        color="primary"
-                                                        size="medium"
-                                                    />
-                                                }
-                                                label=""
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className={`mt-4 px-4 py-3 rounded-md ${status ? 'bg-green-50 border border-green-200' : 'bg-gray-100 border border-gray-200'}`}>
-                                        <div className="flex items-center">
-                                            <div className={`w-3 h-3 rounded-full mr-3 ${status ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                                            <span className={`text-sm ${status ? 'text-green-700' : 'text-gray-600'}`}>
-                                                {status
-                                                    ? '✓ Department is operational and will appear in all listings.'
-                                                    : '✗ Department is disabled and will not appear in listings.'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex justify-end space-x-4 mt-10 pt-8 border-t border-gray-200">
-                            <button
-                                type="button"
-                                onClick={() => router.push("/owner/departments")}
-                                className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                className="px-8 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                            >
-                                <div className="flex items-center">
-                                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                    </svg>
-                                    Create Department
-                                </div>
-                            </button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-
-            {/* Quick Tips */}
-            <div className="mt-8 p-6 bg-blue-50 rounded-xl border border-blue-200">
-                <div className="flex items-start">
-                    <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                        <h4 className="font-medium text-blue-800">Department Creation Guidelines</h4>
-                        <ul className="mt-2 text-blue-700 text-sm space-y-1">
-                            <li>• Use consistent naming conventions (e.g., HR, IT, Finance)</li>
-                            <li>• Department codes should be unique and follow your organization&apos;s pattern</li>
-                            <li>• Parent department is optional - use for creating sub-departments</li>
-                            <li>• Active departments will be immediately available in the system</li>
-                            <li>• You can add team members to departments after creation</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            {/* Available Departments Preview */}
-            <div className="mt-8">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-800">Available Departments</h3>
-                    <span className="text-sm text-gray-500">{departmentList.length} main departments</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {departmentList.map((dept) => (
-                        <div key={dept.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-gray-300 transition-colors">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium text-gray-800">{dept.name}</span>
-                                <span className="text-sm bg-primary/10 text-primary px-2 py-1 rounded">{dept.departmentCode}</span>
-                            </div>
-                            {dept.subDepartments.length > 0 && (
-                                <div className="mt-3">
-                                    <p className="text-sm text-gray-600 mb-1">Sub-departments:</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {dept.subDepartments.map((sub) => (
-                                            <span key={sub.id} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                                                {sub.name}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
+      {/* Quick Tips */}
+      <Alert severity="info" icon={false} sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" gutterBottom>
+          💡 Tips for creating departments:
+        </Typography>
+        <ul style={{ margin: 0, paddingLeft: 20 }}>
+          <li>Department names should be clear and descriptive</li>
+          <li>You can add multiple sub-departments under a main department</li>
+          <li>Sub-departments inherit the client ID from the main department</li>
+          <li>You can update department structure at any time</li>
+        </ul>
+      </Alert>
+    </div>
+  );
 };
 
 export default AddDeptMainArea;

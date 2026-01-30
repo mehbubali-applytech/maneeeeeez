@@ -1,9 +1,7 @@
-// AddEditEmployee.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
-
+import { usePathname, useParams } from "next/navigation";
 import {
   Box,
   Stepper,
@@ -20,9 +18,7 @@ import {
   Chip,
   Avatar,
   IconButton,
-  Tooltip,
   CircularProgress,
-  Snackbar
 } from "@mui/material";
 import {
   Save,
@@ -41,9 +37,10 @@ import {
   Visibility,
   VisibilityOff
 } from "@mui/icons-material";
-import { useForm, FormProvider, useFormContext, Controller } from "react-hook-form";
+import { useForm, FormProvider, SubmitHandler } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import axios from "axios";
 
 // Import Tab Components
 import PersonalInfoTab from "./tabs/PersonalInfoTab";
@@ -70,19 +67,25 @@ const steps = [
 
 const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add' }) => {
   const router = useRouter();
+  const pathname = usePathname();
+  const params = useParams();
   const [activeStep, setActiveStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const pathname = usePathname();
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [designations, setDesignations] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(false);
 
   const baseEmployeesRoute = React.useMemo(() => {
-  if (pathname.startsWith("/super-admin")) {
-    return "/super-admin/employees";
-  }
-  return "/owner/employees";
-}, [pathname]);
+    if (pathname.startsWith("/super-admin")) {
+      return "/super-admin/employees";
+    }
+    return "/owner/employees";
+  }, [pathname]);
 
   const methods = useForm<IEmployeeForm>({
     defaultValues: {
@@ -99,6 +102,7 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
       roleId: 0,
       departmentId: 0,
       workLocationId: 0,
+      designation: '',
       presentAddress: {
         addressLine1: '',
         city: '',
@@ -113,7 +117,9 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
       allowances: [],
       deductions: [],
       documents: [],
-      newDocuments: []
+      newDocuments: [],
+      salary_structure: {},
+      roleIds: []
     }
   });
 
@@ -124,34 +130,147 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
   const watchSystemUserEnabled = watch('systemUserEnabled');
   const watchSameAsPresentAddress = watch('sameAsPresentAddress');
 
+  // Fetch initial data
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      setIsLoadingData(true);
+      try {
+        // Fetch departments
+        const deptResponse = await axios.get(
+          `${process.env.NEXT_PUBLIC_API_URL}/owner/department`,
+          { withCredentials: true }
+        );
+        if (deptResponse.data?.data) {
+          setDepartments(deptResponse.data.data);
+        }
+
+        // Fetch designations
+        const desigResponse = await axios.get(
+          `${process.env.NEXT_PUBLIC_API_URL}/owner/designation`,
+          { withCredentials: true }
+        );
+        if (desigResponse.data?.data) {
+          setDesignations(desigResponse.data.data);
+        }
+
+        // Fetch branches
+        const branchResponse = await axios.get(
+          `${process.env.NEXT_PUBLIC_API_URL}/owner/branch/client`,
+          { withCredentials: true }
+        );
+        if (branchResponse.data?.data) {
+          setBranches(branchResponse.data.data);
+        }
+
+        // Fetch roles - create this endpoint or use existing one
+        try {
+          const rolesResponse = await axios.get(
+            `${process.env.NEXT_PUBLIC_API_URL}/roles`,
+            { withCredentials: true }
+          );
+          if (rolesResponse.data?.data) {
+            setRoles(rolesResponse.data.data);
+          }
+        } catch (rolesError) {
+          console.warn("Roles endpoint not available, using default roles");
+          // Use default roles if endpoint doesn't exist
+          setRoles([
+            { role_id: 1, role_name: "Employee", description: "Basic employee access" },
+            { role_id: 2, role_name: "Manager", description: "Department management access" },
+            { role_id: 3, role_name: "Admin", description: "Full system access" },
+            { role_id: 4, role_name: "HR", description: "HR management access" },
+          ]);
+        }
+      } catch (error) {
+        console.error("Error fetching initial data:", error);
+        toast.error("Failed to load initial data");
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+
+    fetchInitialData();
+  }, []);
+
   // Load employee data in edit mode
   useEffect(() => {
-    if (employee && mode === 'edit') {
-      // Transform employee data to form data
-      const formData: Partial<IEmployeeForm> = {
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        email: employee.email,
-        // ... map all fields
-      };
-      reset(formData);
-      if (employee.profilePhoto) {
-        setProfileImage(employee.profilePhoto);
+    const loadEmployeeData = async () => {
+      if (mode === 'edit' && params.id) {
+        setIsLoadingData(true);
+        try {
+          const response = await axios.get(
+            `${process.env.NEXT_PUBLIC_API_URL}/owner/employee/byId?employee_id=${params.id}`,
+            { withCredentials: true }
+          );
+
+          if (response.data?.data) {
+            const emp = response.data.data;
+            
+            // Transform API data to form data
+            const formData: IEmployeeForm = {
+              firstName: emp.first_name,
+              lastName: emp.last_name,
+              email: emp.email,
+              phoneNumber: emp.phone,
+              dateOfJoining: emp.date_of_joining,
+              workType: 'Full-time', // Default
+              employmentStatus: emp.is_active === 1 ? 'Active' : 'Inactive',
+              attendanceType: 'Biometric', // Default
+              systemUserEnabled: !!emp.User?.username,
+              payFrequency: 'Monthly', // Default
+              roleId: emp.User?.userRoles?.[0]?.role?.role_id || 0,
+              departmentId: emp.department_id || 0,
+              workLocationId: emp.branch_id || 0,
+              designation: emp.designation,
+              
+              presentAddress: {
+                addressLine1: '',
+                city: '',
+                state: '',
+                country: 'India',
+                zipCode: ''
+              },
+              
+              sameAsPresentAddress: true,
+              emergencyContactName: '',
+              emergencyContactRelation: '',
+              emergencyContactPhone: '',
+              
+              salary_structure: emp.EmployeeSalaryStructure?.[0]?.salary_structure || {},
+              
+              allowances: [],
+              deductions: [],
+              documents: emp.documents || [],
+              newDocuments: [],
+              
+              roleIds: emp.User?.userRoles?.map((ur: any) => ur.role_id) || []
+            };
+            
+            reset(formData);
+            
+            if (emp.profilePhoto) {
+              setProfileImage(emp.profilePhoto);
+            }
+          }
+        } catch (error) {
+          console.error("Error loading employee data:", error);
+          toast.error("Failed to load employee data");
+        } finally {
+          setIsLoadingData(false);
+        }
       }
-    }
-  }, [employee, mode, reset]);
+    };
+
+    loadEmployeeData();
+  }, [mode, params.id, reset]);
 
   const handleNext = async () => {
     const fieldsToValidate = getStepFields(activeStep);
     const isValidStep = await trigger(fieldsToValidate as any);
 
     if (isValidStep) {
-      // Auto-save current step
-      await handleSaveDraft();
-
       if (activeStep < steps.length - 1) {
         setActiveStep(prev => prev + 1);
-        // Scroll to top
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } else {
@@ -169,79 +288,107 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
   const getStepFields = (step: number): string[] => {
     switch (step) {
       case 0: // Personal Info
-        return ['firstName', 'lastName', 'email', 'dateOfBirth', 'emergencyContactName'];
+        return ['firstName', 'lastName', 'email', 'phoneNumber'];
       case 1: // Job Details
-        return ['dateOfJoining', 'roleId', 'departmentId', 'workLocationId', 'workType'];
+        return ['dateOfJoining', 'designation', 'departmentId'];
       case 2: // Salary
-        return ['costToCompany', 'payFrequency'];
+        return []; // Optional
       case 3: // Documents
-        return []; // Documents are optional
+        return []; // Optional
       case 4: // Access
-        return ['attendanceType'];
+        return []; // Optional
       default:
         return [];
     }
   };
 
-  const handleSaveDraft = async () => {
-    const formData = methods.getValues();
-    // Save to localStorage or API
-    localStorage.setItem('employee_draft', JSON.stringify(formData));
-    toast.success("Progress saved as draft");
-  };
-
-  const handleFinalSubmit = async (data: IEmployeeForm) => {
+  const handleFinalSubmit: SubmitHandler<IEmployeeForm> = async (data) => {
     setIsSubmitting(true);
 
     try {
-      // Transform data
-      const employeeData = {
-        ...data,
-        employeeId: mode === 'add' ? `EMP${Date.now()}` : employee!.employeeId,
-        employeeCode: `EMP${Math.floor(1000 + Math.random() * 9000)}`,
-        status: 'Active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        createdBy: 'Owner', // Replace with actual user
-        updatedBy: 'Owner'
+      // Prepare payload based on API requirements
+      const payload = {
+        // Personal Info
+        first_name: data.firstName,
+        last_name: data.lastName,
+        email: data.email,
+        phone: data.phoneNumber,
+        designation: data.designation,
+        date_of_joining: data.dateOfJoining,
+        
+        // Job Details
+        department_id: data.departmentId,
+        branch_id: data.workLocationId,
+        
+        // Salary Structure
+        salary_structure: data.salary_structure,
+        
+        // Attributes (custom fields)
+        attributes: [
+          // Add any custom attributes here
+        ],
+        
+        // Roles
+        roleIds: data.roleIds,
+        
+        // System User
+        systemUserEnabled: data.systemUserEnabled,
+        username: data.systemUserEnabled ? data.email.split('@')[0] : undefined,
+        
+        // Address
+        address: data.presentAddress
       };
 
-      // API call would go here
-      console.log('Submitting employee:', employeeData);
-
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API delay
-
-      toast.success(mode === 'add' ? "Employee added successfully!" : "Employee updated successfully!");
-
-      // Clear draft
-      localStorage.removeItem('employee_draft');
+      let response;
+      
+      if (mode === 'add') {
+        response = await axios.post(
+          `${process.env.NEXT_PUBLIC_API_URL}/owner/employee`,
+          payload,
+          { withCredentials: true }
+        );
+        
+        toast.success("Employee created successfully!");
+      } else {
+        response = await axios.put(
+          `${process.env.NEXT_PUBLIC_API_URL}/owner/employee/${params.id}`,
+          payload,
+          { withCredentials: true }
+        );
+        
+        toast.success("Employee updated successfully!");
+      }
 
       // Navigate to employee list
       setTimeout(() => {
         router.push(baseEmployeesRoute);
       }, 1000);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving employee:', error);
-      toast.error("Failed to save employee");
+      
+      let errorMessage = "Failed to save employee";
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleSaveAndActivate = async (data: IEmployeeForm) => {
+  const handleSaveAndActivate: SubmitHandler<IEmployeeForm> = async (data) => {
     const finalData: IEmployeeForm = {
       ...data,
       employmentStatus: 'Active'
     };
 
     await handleFinalSubmit(finalData);
-
-
-    // Send onboarding email if system user is enabled
-    if (data.systemUserEnabled) {
-      toast.info("Onboarding email will be sent to the employee");
-    }
   };
 
   const handleExit = () => {
@@ -249,7 +396,6 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
       setShowExitConfirm(true);
     } else {
       router.push(baseEmployeesRoute);
-
     }
   };
 
@@ -286,22 +432,44 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
           />
         );
       case 1:
-        return <JobDetailsTab watchWorkType={watchWorkType} />;
+        return (
+          <JobDetailsTab 
+            watchWorkType={watchWorkType}
+            departments={departments}
+            designations={designations}
+            branches={branches}
+            isLoading={isLoadingData}
+          />
+        );
       case 2:
         return <SalaryTab />;
       case 3:
         return <DocumentsTab />;
       case 4:
-        return <AccessTab watchSystemUserEnabled={watchSystemUserEnabled} />;
+        return (
+          <AccessTab 
+            watchSystemUserEnabled={watchSystemUserEnabled}
+            roles={roles}
+            isLoading={isLoadingData}
+          />
+        );
       default:
         return null;
     }
   };
 
-  const getStepValidation = async (step: number) => {
-    const fields = getStepFields(step);
-    return await trigger(fields as any);
-  };
+  if (isLoadingData && mode === 'edit') {
+    return (
+      <div className="app__slide-wrapper">
+        <div className="flex justify-center items-center h-64">
+          <div className="text-center">
+            <CircularProgress />
+            <p className="mt-2 text-gray-600">Loading employee data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <FormProvider {...methods}>
@@ -344,8 +512,7 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
           </div>
         </div>
 
-
-              {/* Progress Summary */}
+        {/* Progress Summary */}
         <Paper elevation={0} sx={{
           border: '1px solid',
           borderColor: 'info.light',
@@ -475,22 +642,11 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
             alignItems: 'center'
           }}>
             <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button
-                variant="outlined"
-                startIcon={<Save />}
-
-                onClick={handleSaveDraft}
-                disabled={isSubmitting || !isDirty}
-              >
-                Save Draft
-              </Button>
-
               {mode === 'add' && (
                 <Button
                   variant="contained"
                   color="success"
                   className="!text-white"
-
                   startIcon={<Send />}
                   onClick={methods.handleSubmit(handleSaveAndActivate)}
                   disabled={isSubmitting || !isValid}
@@ -539,7 +695,6 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
                   variant="contained"
                   endIcon={<ArrowForward />}
                   className="!text-white"
-
                   onClick={handleNext}
                   disabled={isSubmitting}
                 >
@@ -549,8 +704,6 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
             </Box>
           </Box>
         </Paper>
-
-
       </div>
 
       {/* Exit Confirmation Dialog */}
@@ -558,22 +711,11 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
         <DialogTitle>Unsaved Changes</DialogTitle>
         <DialogContent>
           <Typography>
-            You have unsaved changes. Do you want to save them as draft before leaving?
+            You have unsaved changes. Are you sure you want to leave?
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowExitConfirm(false)}>Cancel</Button>
-          <Button
-            onClick={async () => {
-              await handleSaveDraft();
-              setShowExitConfirm(false);
-              router.push(baseEmployeesRoute);
-
-            }}
-            color="primary"
-          >
-            Save Draft & Exit
-          </Button>
           <Button
             onClick={() => {
               setShowExitConfirm(false);

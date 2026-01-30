@@ -1,7 +1,7 @@
 // EmployeeAttendanceTable.tsx
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Box,
   Table,
@@ -17,10 +17,13 @@ import {
   Alert,
   Tooltip,
   Autocomplete,
-  TextField
+  TextField,
+  CircularProgress,
+  IconButton
 } from "@mui/material";
-import { Download, FilterList, CalendarMonth } from "@mui/icons-material";
+import { Download, FilterList, CalendarMonth, Refresh } from "@mui/icons-material";
 import AttendanceTypeIcons from "../../hrm/attendance/AttendanceTypeIcons";
+import axios from "axios";
 
 const months = [
   "January", "February", "March", "April", "May", "June",
@@ -43,187 +46,200 @@ interface EmployeeAttendance {
   attendance: AttendanceDay[];
 }
 
+// Interface for API response
+interface ApiAttendanceRecord {
+  attendance_id: number;
+  attendance_date: string;
+  check_in: string | null;
+  check_out: string | null;
+  status: string;
+  leave_id: number | null;
+  actions: {
+    shift: {
+      shift_id: number;
+    };
+    punches: {
+      check_in?: {
+        time: string;
+        location: string;
+        source: string;
+      };
+      check_out?: {
+        time: string;
+        location: string;
+        source: string;
+      };
+    };
+    manual: {
+      is_manual_entry: boolean;
+    };
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+interface ApiEmployeeData {
+  employee_id: number;
+  employee_code: string;
+  employee_name: string;
+  designation: string;
+  records: ApiAttendanceRecord[];
+}
+
+interface ApiResponse {
+  message: string;
+  error: {
+    errorCode: number;
+    errorMessage: string;
+    errorIdentifier: string;
+  };
+  data: ApiEmployeeData[];
+}
+
 const EmployeeAttendanceTable = () => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [filterDepartment, setFilterDepartment] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [loading, setLoading] = useState(false);
+  const [apiData, setApiData] = useState<ApiEmployeeData[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Generate dummy data for the selected month
-  const generateDummyData = useMemo(() => {
-    const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
-    const employees: EmployeeAttendance[] = [
-      {
-        id: "EMP001",
-        name: "Rajesh Kumar",
-        department: "Engineering",
-        role: "Software Engineer",
-        attendance: Array.from({ length: daysInMonth }, (_, i) => {
-          const day = i + 1;
-          const date = new Date(selectedYear, selectedMonth - 1, day);
-          const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
-          
-          // Weekends are day off
-          if (dayOfWeek === 0 || dayOfWeek === 6) {
-            return { status: 'dayoff' as const };
+  // Fetch data from API
+  const fetchAttendanceData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await axios.get<ApiResponse>(
+        `${process.env.NEXT_PUBLIC_API_URL}/owner/attendance/summary/monthly`,
+        {
+          params: {
+            month: selectedMonth.toString().padStart(2, '0'),
+            year: selectedYear,
+            client_id: 27
           }
-          
-          // Public holidays
-          if (day === 1 || day === 26) { // 1st and 26th as example holidays
-            return { status: 'holiday' as const };
-          }
-          
-          // Random status for other days
-          const statuses: ('present' | 'absent' | 'late' | 'halfday' | 'onleave')[] = 
-            ['present', 'present', 'present', 'present', 'late', 'halfday', 'absent', 'onleave'];
-          const weights = [0.35, 0.35, 0.35, 0.35, 0.1, 0.05, 0.03, 0.02];
-          
-          let random = Math.random();
-          let statusIndex = 0;
-          while (random > weights[statusIndex]) {
-            random -= weights[statusIndex];
-            statusIndex++;
-          }
-          
-          const status = statuses[statusIndex % statuses.length];
-          
-          // Generate times based on status
-          let checkIn, checkOut, hours;
-          switch(status) {
-            case 'present':
-              checkIn = '09:00';
-              checkOut = '18:00';
-              hours = 9;
-              break;
-            case 'late':
-              checkIn = '09:45';
-              checkOut = '18:00';
-              hours = 8.25;
-              break;
-            case 'halfday':
-              checkIn = '09:00';
-              checkOut = '13:00';
-              hours = 4;
-              break;
-            default:
-              checkIn = undefined;
-              checkOut = undefined;
-              hours = 0;
-          }
-          
-          return { status, checkIn, checkOut, hours };
-        })
-      },
-      {
-        id: "EMP002",
-        name: "Priya Sharma",
-        department: "Marketing",
-        role: "Marketing Manager",
-        attendance: Array.from({ length: daysInMonth }, (_, i) => {
-          const day = i + 1;
-          const date = new Date(selectedYear, selectedMonth - 1, day);
-          const dayOfWeek = date.getDay();
-          
-          if (dayOfWeek === 0 || dayOfWeek === 6) {
-            return { status: 'dayoff' };
-          }
-          
-          if (day === 1 || day === 26) {
-            return { status: 'holiday' };
-          }
-          
-          // Priya is usually present
-          if (day % 7 === 0) {
-            return { status: 'onleave', hours: 0 };
-          }
-          
-          return {
-            status: 'present' as const,
-            checkIn: '09:30',
-            checkOut: '18:30',
-            hours: 9
-          };
-        })
-      },
-      {
-        id: "EMP003",
-        name: "Amit Patel",
-        department: "Sales",
-        role: "Sales Executive",
-        attendance: Array.from({ length: daysInMonth }, (_, i) => {
-          const day = i + 1;
-          const date = new Date(selectedYear, selectedMonth - 1, day);
-          const dayOfWeek = date.getDay();
-          
-          if (dayOfWeek === 0 || dayOfWeek === 6) {
-            return { status: 'dayoff' };
-          }
-          
-          if (day === 1 || day === 26) {
-            return { status: 'holiday' };
-          }
-          
-          // Amit is often late
-          if (day % 3 === 0) {
-            return {
-              status: 'late' as const,
-              checkIn: '10:15',
-              checkOut: '19:00',
-              hours: 8.75
-            };
-          }
-          
-          return {
-            status: 'present' as const,
-            checkIn: '09:15',
-            checkOut: '18:15',
-            hours: 9
-          };
-        })
-      },
-      {
-        id: "EMP004",
-        name: "Sneha Reddy",
-        department: "HR",
-        role: "HR Manager",
-        attendance: Array.from({ length: daysInMonth }, (_, i) => {
-          const day = i + 1;
-          const date = new Date(selectedYear, selectedMonth - 1, day);
-          const dayOfWeek = date.getDay();
-          
-          if (dayOfWeek === 0 || dayOfWeek === 6) {
-            return { status: 'dayoff' };
-          }
-          
-          if (day === 1 || day === 26) {
-            return { status: 'holiday' };
-          }
-          
-          // Sneha takes some half days
-          if (day % 5 === 0) {
-            return {
-              status: 'halfday' as const,
-              checkIn: '09:00',
-              checkOut: '13:00',
-              hours: 4
-            };
-          }
-          
-          return {
-            status: 'present' as const,
-            checkIn: '09:00',
-            checkOut: '18:00',
-            hours: 9
-          };
-        })
+        }
+      );
+      
+      if (response.data.error.errorCode === 0) {
+        setApiData(response.data.data);
+      } else {
+        throw new Error(response.data.error.errorMessage || 'Failed to fetch attendance data');
       }
-    ];
+    } catch (err) {
+      console.error('Error fetching attendance data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch attendance data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return employees;
+  useEffect(() => {
+    fetchAttendanceData();
   }, [selectedMonth, selectedYear]);
 
+  // Transform API data to match component format
+  const generateEmployeeData = useMemo(() => {
+    if (!apiData || apiData.length === 0) {
+      return [];
+    }
+
+    const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+    
+    return apiData.map((employee): EmployeeAttendance => {
+      // Create a map of attendance by day for easy lookup
+      const attendanceByDate = new Map<string, ApiAttendanceRecord>();
+      employee.records.forEach(record => {
+        const date = new Date(record.attendance_date);
+        const day = date.getDate();
+        attendanceByDate.set(day.toString(), record);
+      });
+
+      // Generate attendance array for all days in month
+      const attendance: AttendanceDay[] = Array.from({ length: daysInMonth }, (_, i) => {
+        const day = i + 1;
+        const date = new Date(selectedYear, selectedMonth - 1, day);
+        const dayOfWeek = date.getDay();
+        
+        // Weekends are day off
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+          return { status: 'dayoff' as const };
+        }
+
+        // Check if we have API record for this day
+        const apiRecord = attendanceByDate.get(day.toString());
+        
+        if (apiRecord) {
+          // Map API status to component status
+          let status: AttendanceDay['status'];
+          switch (apiRecord.status.toLowerCase()) {
+            case 'present':
+              status = 'present';
+              break;
+            case 'absent':
+              status = 'absent';
+              break;
+            case 'half day':
+            case 'halfday':
+              status = 'halfday';
+              break;
+            case 'late':
+              status = 'late';
+              break;
+            case 'leave':
+              status = 'onleave';
+              break;
+            default:
+              status = 'absent';
+          }
+
+          // Calculate hours worked
+          let hours = 0;
+          if (apiRecord.check_in && apiRecord.check_out) {
+            const checkInTime = apiRecord.check_in;
+            const checkOutTime = apiRecord.check_out;
+            
+            // Parse time strings (HH:mm format)
+            const [checkInHour, checkInMinute] = checkInTime.split(':').map(Number);
+            const [checkOutHour, checkOutMinute] = checkOutTime.split(':').map(Number);
+            
+            const checkInDate = new Date(selectedYear, selectedMonth - 1, day, checkInHour, checkInMinute);
+            const checkOutDate = new Date(selectedYear, selectedMonth - 1, day, checkOutHour, checkOutMinute);
+            
+            hours = (checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60);
+            
+            // Adjust for lunch break if needed (e.g., subtract 1 hour)
+            if (hours > 4) {
+              hours -= 1; // Subtract lunch hour
+            }
+          }
+
+          return {
+            status,
+            checkIn: apiRecord.check_in || undefined,
+            checkOut: apiRecord.check_out || undefined,
+            hours: hours > 0 ? hours : undefined,
+            notes: apiRecord.leave_id ? `Leave ID: ${apiRecord.leave_id}` : undefined
+          };
+        }
+
+        // If no API record and it's a weekday, mark as absent
+        return { status: 'absent' as const };
+      });
+
+      return {
+        id: employee.employee_code,
+        name: employee.employee_name,
+        department: "Engineering", // You might need to get this from another API
+        role: employee.designation,
+        attendance
+      };
+    });
+  }, [apiData, selectedMonth, selectedYear]);
+
   const filteredEmployees = useMemo(() => {
-    return generateDummyData.filter(employee => {
+    return generateEmployeeData.filter(employee => {
       if (filterDepartment !== "All" && employee.department !== filterDepartment) {
         return false;
       }
@@ -235,13 +251,13 @@ const EmployeeAttendanceTable = () => {
       
       return true;
     });
-  }, [generateDummyData, filterDepartment, filterStatus]);
+  }, [generateEmployeeData, filterDepartment, filterStatus]);
 
   // Get unique departments for Autocomplete
   const departments = useMemo(() => {
-    const depts = Array.from(new Set(generateDummyData.map(emp => emp.department)));
+    const depts = Array.from(new Set(generateEmployeeData.map(emp => emp.department)));
     return [{ label: "All Departments", value: "All" }, ...depts.map(dept => ({ label: dept, value: dept }))];
-  }, [generateDummyData]);
+  }, [generateEmployeeData]);
 
   // Status options for Autocomplete
   const statusOptions = useMemo(() => [
@@ -394,7 +410,6 @@ const EmployeeAttendanceTable = () => {
                   {...params}
                   label="Year"
                   placeholder="Select year"
-             
                 />
               )}
               renderOption={(props, option) => (
@@ -413,17 +428,51 @@ const EmployeeAttendanceTable = () => {
               variant="outlined"
             />
             
+            <IconButton
+              onClick={fetchAttendanceData}
+              disabled={loading}
+              sx={{ ml: 1 }}
+            >
+              <Refresh />
+            </IconButton>
+            
             <Box sx={{ flexGrow: 1 }} />
             
-            <Typography variant="body2" color="text.secondary">
-              {filteredEmployees.length} employees • {new Date(selectedYear, selectedMonth, 0).getDate()} days
-            </Typography>
+            {loading ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={20} />
+                <Typography variant="body2" color="text.secondary">
+                  Loading...
+                </Typography>
+              </Box>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                {filteredEmployees.length} employees • {new Date(selectedYear, selectedMonth, 0).getDate()} days
+              </Typography>
+            )}
           </Box>
         </Paper>
       </Box>
 
       {/* Attendance Type Icons Legend */}
       <AttendanceTypeIcons />
+
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          <Typography variant="body2">
+            Error loading attendance data: {error}
+          </Typography>
+          <Button 
+            size="small" 
+            onClick={fetchAttendanceData} 
+            sx={{ mt: 1 }}
+            disabled={loading}
+          >
+            Retry
+          </Button>
+        </Alert>
+      )}
 
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 3 }}>
@@ -443,7 +492,6 @@ const EmployeeAttendanceTable = () => {
                 {...params}
                 label="Department"
                 placeholder="Select department"
-            
               />
             )}
             renderOption={(props, option) => (
@@ -468,7 +516,6 @@ const EmployeeAttendanceTable = () => {
                 {...params}
                 label="Status"
                 placeholder="Select status"
-       
               />
             )}
             renderOption={(props, option) => (
@@ -499,232 +546,242 @@ const EmployeeAttendanceTable = () => {
             startIcon={<Download />}
             onClick={handleExportCSV}
             className="!text-white"
+            disabled={loading || filteredEmployees.length === 0}
           >
             Export CSV
           </Button>
         </Box>
       </Paper>
 
+      {/* Loading State */}
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
+        </Box>
+      )}
+
       {/* Attendance Table */}
-      <TableContainer component={Paper} sx={{ maxHeight: 600, overflow: 'auto' }}>
-        <Table stickyHeader>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ 
-                position: 'sticky', 
-                left: 0, 
-                zIndex: 5, 
-                bgcolor: 'background.paper', 
-                minWidth: 200,
-                borderRight: '1px solid',
-                borderColor: 'divider'
-              }}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  Employee / Date
-                </Typography>
-              </TableCell>
-              
-              {/* Day Headers */}
-              {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
-                const date = new Date(selectedYear, selectedMonth - 1, day);
-                const dayOfWeek = date.getDay();
-                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                
-                return (
-                  <TableCell 
-                    key={day} 
-                    align="center"
-                    sx={{ 
-                      minWidth: 60,
-                      maxWidth: 60,
-                      bgcolor: isWeekend ? 'grey.50' : 'background.paper',
-                      borderLeft: '1px solid',
-                      borderColor: 'divider'
-                    }}
-                  >
-                    <Typography variant="caption" fontWeight={600} display="block">
-                      {day}
-                    </Typography>
-                    <Typography 
-                      variant="caption" 
-                      display="block" 
-                      color={isWeekend ? 'error.main' : 'text.secondary'}
-                      sx={{ fontSize: '0.7rem' }}
-                    >
-                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek]}
-                    </Typography>
-                  </TableCell>
-                );
-              })}
-              
-              <TableCell align="center" sx={{ 
-                minWidth: 120,
-                position: 'sticky',
-                right: 0,
-                bgcolor: 'background.paper',
-                borderLeft: '1px solid',
-                borderColor: 'divider'
-              }}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  Summary
-                </Typography>
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          
-          <TableBody>
-            {filteredEmployees.map((employee) => {
-              const summary = calculateSummary(employee.attendance);
-              
-              return (
-                <TableRow key={employee.id} hover>
-                  {/* Employee Info */}
+      {!loading && filteredEmployees.length > 0 && (
+        <>
+          <TableContainer component={Paper} sx={{ maxHeight: 600, overflow: 'auto' }}>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
                   <TableCell sx={{ 
                     position: 'sticky', 
                     left: 0, 
-                    zIndex: 4, 
-                    bgcolor: 'background.paper',
+                    zIndex: 5, 
+                    bgcolor: 'background.paper', 
+                    minWidth: 200,
                     borderRight: '1px solid',
                     borderColor: 'divider'
                   }}>
-                    <Box>
-                      <Typography variant="subtitle2" fontWeight={600}>
-                        {employee.name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" display="block">
-                        {employee.role}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        ID: {employee.id}
-                      </Typography>
-                    </Box>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      Employee / Date
+                    </Typography>
                   </TableCell>
                   
-                  {/* Daily Attendance with Icons */}
-                  {employee.attendance.map((day, dayIndex) => (
-                    <TableCell 
-                      key={dayIndex} 
-                      align="center"
-                      sx={{ 
-                        bgcolor: day.status === 'holiday' ? 'primary.50' : 
-                                day.status === 'dayoff' ? 'grey.50' : 
-                                'background.paper',
-                        borderLeft: '1px solid',
-                        borderColor: 'divider'
-                      }}
-                    >
-                      <Tooltip title={getTooltipText(day, dayIndex)} arrow>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <i className={getAttendanceClass(day.status)} style={{ fontSize: '18px' }}></i>
-                          {day.hours && day.hours > 0 && (
-                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
-                              {day.hours}h
-                            </Typography>
-                          )}
-                        </Box>
-                      </Tooltip>
-                    </TableCell>
-                  ))}
+                  {/* Day Headers */}
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
+                    const date = new Date(selectedYear, selectedMonth - 1, day);
+                    const dayOfWeek = date.getDay();
+                    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                    
+                    return (
+                      <TableCell 
+                        key={day} 
+                        align="center"
+                        sx={{ 
+                          minWidth: 60,
+                          maxWidth: 60,
+                          bgcolor: isWeekend ? 'grey.50' : 'background.paper',
+                          borderLeft: '1px solid',
+                          borderColor: 'divider'
+                        }}
+                      >
+                        <Typography variant="caption" fontWeight={600} display="block">
+                          {day}
+                        </Typography>
+                        <Typography 
+                          variant="caption" 
+                          display="block" 
+                          color={isWeekend ? 'error.main' : 'text.secondary'}
+                          sx={{ fontSize: '0.7rem' }}
+                        >
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek]}
+                        </Typography>
+                      </TableCell>
+                    );
+                  })}
                   
-                  {/* Fill remaining days if month has less than 31 days */}
-                  {Array.from({ length: Math.max(0, 31 - employee.attendance.length) }, (_, i) => (
-                    <TableCell key={`empty-${i}`} align="center">—</TableCell>
-                  ))}
-                  
-                  {/* Summary Column - Fixed on right */}
                   <TableCell align="center" sx={{ 
+                    minWidth: 120,
                     position: 'sticky',
                     right: 0,
                     bgcolor: 'background.paper',
                     borderLeft: '1px solid',
                     borderColor: 'divider'
                   }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      {/* Present */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <i className="fa fa-check text-success" style={{ fontSize: '12px' }}></i>
-                        <Typography variant="caption" fontWeight={600}>
-                          {summary.present}
-                        </Typography>
-                      </Box>
-                      
-                      {/* Absent */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <i className="fa fa-times text-danger" style={{ fontSize: '12px' }}></i>
-                        <Typography variant="caption">
-                          {summary.absent}
-                        </Typography>
-                      </Box>
-                      
-                      {/* Working Hours */}
-                      <Box>
-                        <Typography variant="caption" color="text.secondary">
-                          {summary.totalHours.toFixed(0)}h
-                        </Typography>
-                      </Box>
-                    </Box>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      Summary
+                    </Typography>
                   </TableCell>
                 </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </TableContainer>
+              </TableHead>
+              
+              <TableBody>
+                {filteredEmployees.map((employee) => {
+                  const summary = calculateSummary(employee.attendance);
+                  
+                  return (
+                    <TableRow key={employee.id} hover>
+                      {/* Employee Info */}
+                      <TableCell sx={{ 
+                        position: 'sticky', 
+                        left: 0, 
+                        zIndex: 4, 
+                        bgcolor: 'background.paper',
+                        borderRight: '1px solid',
+                        borderColor: 'divider'
+                      }}>
+                        <Box>
+                          <Typography variant="subtitle2" fontWeight={600}>
+                            {employee.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {employee.role}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            ID: {employee.id}
+                          </Typography>
+                        </Box>
+                      </TableCell>
+                      
+                      {/* Daily Attendance with Icons */}
+                      {employee.attendance.map((day, dayIndex) => (
+                        <TableCell 
+                          key={dayIndex} 
+                          align="center"
+                          sx={{ 
+                            bgcolor: day.status === 'holiday' ? 'primary.50' : 
+                                    day.status === 'dayoff' ? 'grey.50' : 
+                                    'background.paper',
+                            borderLeft: '1px solid',
+                            borderColor: 'divider'
+                          }}
+                        >
+                          <Tooltip title={getTooltipText(day, dayIndex)} arrow>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                              <i className={getAttendanceClass(day.status)} style={{ fontSize: '18px' }}></i>
+                              {day.hours && day.hours > 0 && (
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                                  {day.hours.toFixed(1)}h
+                                </Typography>
+                              )}
+                            </Box>
+                          </Tooltip>
+                        </TableCell>
+                      ))}
+                      
+                      {/* Fill remaining days if month has less than 31 days */}
+                      {Array.from({ length: Math.max(0, 31 - employee.attendance.length) }, (_, i) => (
+                        <TableCell key={`empty-${i}`} align="center">—</TableCell>
+                      ))}
+                      
+                      {/* Summary Column - Fixed on right */}
+                      <TableCell align="center" sx={{ 
+                        position: 'sticky',
+                        right: 0,
+                        bgcolor: 'background.paper',
+                        borderLeft: '1px solid',
+                        borderColor: 'divider'
+                      }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {/* Present */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <i className="fa fa-check text-success" style={{ fontSize: '12px' }}></i>
+                            <Typography variant="caption" fontWeight={600}>
+                              {summary.present}
+                            </Typography>
+                          </Box>
+                          
+                          {/* Absent */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <i className="fa fa-times text-danger" style={{ fontSize: '12px' }}></i>
+                            <Typography variant="caption">
+                              {summary.absent}
+                            </Typography>
+                          </Box>
+                          
+                          {/* Working Hours */}
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              {summary.totalHours.toFixed(1)}h
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
 
-      {/* Overall Summary */}
-      {filteredEmployees.length > 0 && (
-        <Paper sx={{ p: 2, mt: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>Monthly Summary:</Typography>
-          <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <Typography variant="caption" color="text.secondary">Total Employees</Typography>
-              <Typography variant="h6">{filteredEmployees.length}</Typography>
+          {/* Overall Summary */}
+          <Paper sx={{ p: 2, mt: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>Monthly Summary:</Typography>
+            <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                <Typography variant="caption" color="text.secondary">Total Employees</Typography>
+                <Typography variant="h6">{filteredEmployees.length}</Typography>
+              </Box>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                <Typography variant="caption" color="text.secondary">Average Present %</Typography>
+                <Typography variant="h6">
+                  {Math.round(filteredEmployees.reduce((sum, emp) => {
+                    const summary = calculateSummary(emp.attendance);
+                    const totalDays = emp.attendance.length;
+                    const presentDays = summary.present + summary.halfday * 0.5;
+                    return sum + (presentDays / totalDays * 100);
+                  }, 0) / filteredEmployees.length)}%
+                </Typography>
+              </Box>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                <Typography variant="caption" color="text.secondary">Total Work Hours</Typography>
+                <Typography variant="h6">
+                  {filteredEmployees.reduce((sum, emp) => 
+                    sum + calculateSummary(emp.attendance).totalHours, 0
+                  ).toFixed(0)}h
+                </Typography>
+              </Box>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                <Typography variant="caption" color="text.secondary">Late Entries</Typography>
+                <Typography variant="h6" color="warning.main">
+                  {filteredEmployees.reduce((sum, emp) => 
+                    sum + calculateSummary(emp.attendance).late, 0
+                  )}
+                </Typography>
+              </Box>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                <Typography variant="caption" color="text.secondary">Absent Days</Typography>
+                <Typography variant="h6" color="error.main">
+                  {filteredEmployees.reduce((sum, emp) => 
+                    sum + calculateSummary(emp.attendance).absent, 0
+                  )}
+                </Typography>
+              </Box>
             </Box>
-            
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <Typography variant="caption" color="text.secondary">Average Present %</Typography>
-              <Typography variant="h6">
-                {Math.round(filteredEmployees.reduce((sum, emp) => {
-                  const summary = calculateSummary(emp.attendance);
-                  const totalDays = emp.attendance.length;
-                  const presentDays = summary.present + summary.halfday * 0.5;
-                  return sum + (presentDays / totalDays * 100);
-                }, 0) / filteredEmployees.length)}%
-              </Typography>
-            </Box>
-            
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <Typography variant="caption" color="text.secondary">Total Work Hours</Typography>
-              <Typography variant="h6">
-                {filteredEmployees.reduce((sum, emp) => 
-                  sum + calculateSummary(emp.attendance).totalHours, 0
-                ).toFixed(0)}h
-              </Typography>
-            </Box>
-            
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <Typography variant="caption" color="text.secondary">Late Entries</Typography>
-              <Typography variant="h6" color="warning.main">
-                {filteredEmployees.reduce((sum, emp) => 
-                  sum + calculateSummary(emp.attendance).late, 0
-                )}
-              </Typography>
-            </Box>
-            
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <Typography variant="caption" color="text.secondary">Absent Days</Typography>
-              <Typography variant="h6" color="error.main">
-                {filteredEmployees.reduce((sum, emp) => 
-                  sum + calculateSummary(emp.attendance).absent, 0
-                )}
-              </Typography>
-            </Box>
-          </Box>
-        </Paper>
+          </Paper>
+        </>
       )}
 
       {/* Empty State */}
-      {filteredEmployees.length === 0 && (
+      {!loading && filteredEmployees.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           <Typography>
             No attendance records found for the selected filters.

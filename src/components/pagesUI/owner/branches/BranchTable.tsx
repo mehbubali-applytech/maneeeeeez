@@ -33,19 +33,20 @@ import { IBranch } from "./BranchTypes";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PeopleIcon from "@mui/icons-material/People";
-import BadgeIcon from "@mui/icons-material/Badge";
+import EmailIcon from "@mui/icons-material/Email";
+import BusinessIcon from "@mui/icons-material/Business";
 
 const branchHeadCells = [
-  { id: "branchName", label: "Branch Name" },
-  { id: "branchCode", label: "Code" },
+  { id: "branch_name", label: "Branch Name" },
+  { id: "branch_code", label: "Code" },
   { id: "address", label: "Address" },
   { id: "city", label: "City" },
   { id: "phone", label: "Phone" },
   { id: "email", label: "Email" },
-  { id: "managerName", label: "Manager" },
-  { id: "totalEmployees", label: "Employees" },
-  { id: "status", label: "Status" },
-  { id: "establishedDate", label: "Established" },
+  { id: "manager_name", label: "Manager" },
+  { id: "total_employees", label: "Employees" },
+  { id: "is_active", label: "Status" },
+  { id: "created_at", label: "Created" },
 ];
 
 interface Props {
@@ -58,6 +59,36 @@ interface Props {
 const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }) => {
   const [modalDeleteOpen, setModalDeleteOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number>(0);
+
+  // Transform data for table compatibility
+  const transformedData = useMemo(() => {
+    return data.map(branch => ({
+      ...branch,
+      // Ensure all required fields exist
+      branch_name: branch.branch_name || branch.branchName || "",
+      branch_code: branch.branch_code || branch.branchCode || "",
+      phone: branch.phone || "",
+      email: branch.email || "",
+      manager_name: branch.manager_name || branch.managerName || "",
+      manager_email: branch.manager_email || "",
+      total_employees: branch.total_employees || branch.totalEmployees || 0,
+      is_active: branch.is_active || branch.status || "Inactive",
+      address: branch.address || {
+        country: branch.country,
+        state: branch.state,
+        city: branch.city,
+        addressLine1: branch.addressLine1,
+        addressLine2: branch.addressLine2,
+        zipCode: branch.zipCode,
+      },
+      // Add aliases for sorting compatibility
+      branchName: branch.branch_name || branch.branchName,
+      branchCode: branch.branch_code || branch.branchCode,
+      managerName: branch.manager_name || branch.managerName,
+      totalEmployees: branch.total_employees || branch.totalEmployees,
+      status: branch.is_active || branch.status,
+    }));
+  }, [data]);
 
   const {
     order,
@@ -75,15 +106,15 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
     handleChangePage,
     handleChangeRowsPerPage,
     handleSearchChange,
-  } = useMaterialTableHook<IBranch>(data, 10);
+  } = useMaterialTableHook<IBranch>(transformedData, 10);
 
-  const handleDelete = (id: number) => {
-    const index = data.findIndex(row => row.id === id);
-    if (index >= 0) {
-      internalHandleDelete(index);
-      onDelete?.(id);
-    }
-  };
+  // const handleDelete = (id: number) => {
+  //   const index = transformedData.findIndex(row => row.id === id);
+  //   if (index >= 0) {
+  //     internalHandleDelete(index);
+  //     onDelete?.(id);
+  //   }
+  // };
 
   const handleStatusChange = (id: number, currentStatus: string) => {
     if (onStatusChange) {
@@ -94,31 +125,92 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString();
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (e) {
+      return "-";
+    }
   };
 
-  const truncateText = (text: string, maxLength: number) => {
+  const formatDateTime = (dateString?: string) => {
+    if (!dateString) return "-";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return "-";
+    }
+  };
+
+  const truncateText = (text: string | undefined, maxLength: number) => {
     if (!text) return "-";
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + "...";
   };
 
+  const getFullAddress = (branch: IBranch) => {
+    const addr = branch.address;
+    if (!addr) return "";
+    
+    const parts = [
+      addr.addressLine1,
+      addr.addressLine2,
+      addr.city,
+      addr.state,
+      addr.country,
+      addr.zipCode
+    ].filter(Boolean);
+    
+    return parts.join(", ");
+  };
+
   // Prepare table data for export
   const exportData = useMemo((): TableData => {
-    const headers = branchHeadCells.map(cell => cell.label);
+    const headers = [
+      "Branch Name",
+      "Branch Code",
+      "Address",
+      "City",
+      "State",
+      "Country",
+      "Phone",
+      "Email",
+      "Manager",
+      "Manager Email",
+      "Total Employees",
+      "Status",
+      "Created At",
+      "Updated At"
+    ];
     
     const rows = filteredRows.map(branch => {
+      const addr = branch.address || {};
       return [
-        branch.branchName,
-        branch.branchCode,
-        truncateText(branch.address || "", 50),
-        branch.city,
-        branch.phone,
-        branch.email,
-        branch.managerName,
-        branch.totalEmployees?.toString() || "0",
-        branch.status,
-        formatDate(branch.establishedDate)
+        branch.branch_name || branch.branchName || "",
+        branch.branch_code || branch.branchCode || "",
+        getFullAddress(branch),
+        addr.city || branch.city || "",
+        addr.state || branch.state || "",
+        addr.country || branch.country || "",
+        branch.phone || "",
+        branch.email || "",
+        branch.manager_name || branch.managerName || "",
+        branch.manager_email || "",
+        (branch.total_employees || branch.totalEmployees || 0).toString(),
+        branch.is_active || branch.status || "",
+        formatDateTime(branch.created_at),
+        formatDateTime(branch.updated_at)
       ];
     });
     
@@ -126,6 +218,24 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
       headers,
       rows,
       title: `Branches Export - ${filteredRows.length} records`
+    };
+  }, [filteredRows]);
+
+  // Calculate summary stats
+  const summaryStats = useMemo(() => {
+    return {
+      totalBranches: filteredRows.length,
+      activeBranches: filteredRows.filter(b => 
+        (b.is_active === "Active" || b.status === "Active")
+      ).length,
+      totalEmployees: filteredRows.reduce(
+        (sum, b) => sum + (b.total_employees || b.totalEmployees || 0),
+        0
+      ),
+      avgEmployees: Math.round(
+        filteredRows.reduce((sum, b) => sum + (b.total_employees || b.totalEmployees || 0), 0) /
+        (filteredRows.length || 1)
+      )
     };
   }, [filteredRows]);
 
@@ -137,7 +247,7 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
             
             {/* Top Controls Row */}
             <Grid container spacing={2} alignItems="center" className="mb-4">
-              {/* Search Bar - Top Left */}
+              {/* Search Bar */}
               <Grid item xs={12} md={6}>
                 <Box className="flex items-center gap-4">
                   <Typography variant="body2" className="whitespace-nowrap">
@@ -151,12 +261,12 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                     size="small"
                     className="manaz-table-search-input"
                     sx={{ width: '100%', maxWidth: 300 }}
-                    placeholder="Search branches..."
+                    placeholder="Search by name, code, city, or manager..."
                   />
                 </Box>
               </Grid>
               
-              {/* Export Options - Top Right */}
+              {/* Export Options */}
               <Grid item xs={12} md={6}>
                 <Box className="flex justify-end">
                   <DownloadButtonGroup
@@ -222,35 +332,42 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                         <TableRow>
                           <TableCell colSpan={branchHeadCells.length + 2} className="text-center py-8">
                             <div className="flex flex-col items-center justify-center">
-                              <LocationOnIcon className="text-gray-400 mb-2" fontSize="large" />
+                              <BusinessIcon className="text-gray-400 mb-2" fontSize="large" />
                               <Typography variant="body1" className="text-gray-600 mb-2">
                                 No branches found
                               </Typography>
                               <Typography variant="body2" color="text.secondary">
                                 {searchQuery.trim()
                                   ? `Try adjusting your search query: "${searchQuery}"`
-                                  : "Try adding branches to see results"}
+                                  : "Add branches to get started"}
                               </Typography>
                             </div>
                           </TableCell>
                         </TableRow>
                       ) : (
                         paginatedRows.map((row, index) => {
-                          const statusClass = getTableStatusClass(row.status);
+                          const isSelected = selected.includes(index);
+                          const status = row.is_active || row.status || "Inactive";
+                          const statusClass = getTableStatusClass(status);
+                          const addr = row.address || {};
+                          const city = addr.city || row.city || "";
+                          const addressLine1 = addr.addressLine1 || row.addressLine1 || "";
 
                           return (
                             <TableRow
                               key={row.id}
-                              selected={selected.includes(index)}
+                              selected={isSelected}
                               onClick={() => handleClick(index)}
-                              className={`hover:bg-blue-50 ${selected.includes(index) ? 'bg-blue-50' : ''}`}
+                              className={`hover:bg-blue-50 ${isSelected ? 'bg-blue-50' : ''}`}
+                              hover
                             >
                               <TableCell padding="checkbox">
                                 <Checkbox
                                   className="custom-checkbox checkbox-small"
-                                  checked={selected.includes(index)}
+                                  checked={isSelected}
                                   size="small"
                                   onChange={() => handleClick(index)}
+                                  onClick={(e) => e.stopPropagation()}
                                 />
                               </TableCell>
 
@@ -258,111 +375,180 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                                 <div className="font-medium">
                                   <div className="flex items-center gap-2">
                                     <LocationOnIcon fontSize="small" className="text-gray-400" />
-                                    {row.branchName}
+                                    <div>
+                                      <div className="font-semibold">
+                                        {row.branch_name || row.branchName || "Unnamed Branch"}
+                                      </div>
+                                      <div className="text-xs text-gray-500">
+                                        ID: {row.id}
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               </TableCell>
+                              
                               <TableCell>
-                                <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
-                                  {row.branchCode}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <Tooltip title={row.address || ""}>
-                                  <span className="text-gray-600">
-                                    {truncateText(row.address || "", 25)}
+                                <Tooltip title="Branch Code">
+                                  <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                                    {row.branch_code || row.branchCode || "N/A"}
                                   </span>
                                 </Tooltip>
                               </TableCell>
+                              
+                              <TableCell>
+                                <Tooltip title={getFullAddress(row)}>
+                                  <div className="max-w-[200px]">
+                                    <div className="text-gray-800 font-medium">
+                                      {truncateText(addressLine1, 25)}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      {truncateText(addr.addressLine2 || row.addressLine2 || "", 20)}
+                                    </div>
+                                  </div>
+                                </Tooltip>
+                              </TableCell>
+                              
                               <TableCell>
                                 <Chip
-                                  label={row.city}
+                                  label={city}
                                   size="small"
                                   variant="outlined"
                                   color="primary"
+                                  icon={<LocationOnIcon fontSize="small" />}
                                 />
                               </TableCell>
+                              
                               <TableCell>
                                 <div className="flex items-center gap-1">
                                   <PhoneIcon fontSize="small" className="text-gray-400" />
-                                  <span className="font-medium">{row.phone}</span>
+                                  <Tooltip title={row.phone || "No phone"}>
+                                    <span className="font-medium">
+                                      {truncateText(row.phone, 12)}
+                                    </span>
+                                  </Tooltip>
                                 </div>
                               </TableCell>
+                              
                               <TableCell>
-                                <a 
-                                  href={`mailto:${row.email}`}
-                                  className="text-blue-600 hover:text-blue-800 hover:underline"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {truncateText(row.email || "", 20)}
-                                </a>
+                                <Tooltip title={row.email || "No email"}>
+                                  <a 
+                                    href={`mailto:${row.email}`}
+                                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <EmailIcon fontSize="small" />
+                                    {truncateText(row.email, 15)}
+                                  </a>
+                                </Tooltip>
                               </TableCell>
+                              
                               <TableCell>
-                                <span className="font-medium">{row.managerName}</span>
+                                <div>
+                                  <div className="font-medium">
+                                    {row.manager_name || row.managerName || "Not assigned"}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {truncateText(row.manager_email || "", 20)}
+                                  </div>
+                                </div>
                               </TableCell>
+                              
                               <TableCell>
                                 <div className="flex items-center gap-1">
                                   <PeopleIcon fontSize="small" className="text-gray-400" />
-                                  <span className="font-semibold">{row.totalEmployees ?? "0"}</span>
+                                  <Tooltip title="Total Employees">
+                                    <span className="font-semibold">
+                                      {row.total_employees || row.totalEmployees || 0}
+                                    </span>
+                                  </Tooltip>
                                 </div>
                               </TableCell>
-                       <TableCell>
-  <div className="flex items-center gap-2">
-    <Switch
-      size="small"
-      checked={row.status === "Active"}
-      onChange={(e) => {
-        e.stopPropagation();
-        handleStatusChange(row.id, row.status || "Inactive");
-      }}
-      color={row.status === "Active" ? "success" : "default"}
-    />
-    <span className={`bd-badge ${statusClass}`}>
-      {row.status || "Inactive"}
-    </span>
-  </div>
-</TableCell>
+                              
                               <TableCell>
-                                <span className="text-sm text-gray-600">
-                                  {formatDate(row.establishedDate)}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  {/* <Switch
+                                    size="small"
+                                    checked={status === "Active"}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      handleStatusChange(row.id, status);
+                                    }}
+                                    color={status === "Active" ? "success" : "default"}
+                                    onClick={(e) => e.stopPropagation()}
+                                  /> */}
+                                  <span className={`bd-badge ${statusClass}`}>
+                                    {status}
+                                  </span>
+                                </div>
                               </TableCell>
+                              
+                              <TableCell>
+                                <Tooltip title={formatDateTime(row.created_at)}>
+                                  <div className="text-sm">
+                                    {formatDate(row.created_at)}
+                                    <div className="text-xs text-gray-500">
+                                      {row.updated_at && (
+                                        <>Updated: {formatDate(row.updated_at)}</>
+                                      )}
+                                    </div>
+                                  </div>
+                                </Tooltip>
+                              </TableCell>
+                              
                               <TableCell className="table__icon-box">
                                 <div className="flex items-center justify-start gap-2">
-                                  <button
-                                    type="button"
-                                    className="table__icon edit p-1.5 hover:bg-blue-100 rounded"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onEdit?.(row);
-                                    }}
-                                    title="Edit Branch"
-                                  >
-                                    <i className="fa-light fa-edit text-blue-600"></i>
-                                  </button>
-                                  <button
-                                    className="table__icon delete p-1.5 hover:bg-red-100 rounded"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeleteId(row.id);
-                                      setModalDeleteOpen(true);
-                                    }}
-                                    title="Delete Branch"
-                                  >
-                                    <i className="fa-regular fa-trash text-red-600"></i>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="table__icon p-1.5 hover:bg-green-100 rounded"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      // View branch details or assign employees
-                                      console.log("View branch details:", row.id);
-                                    }}
-                                    title="View Details"
-                                  >
-                                    <i className="fa-light fa-eye text-green-600"></i>
-                                  </button>
+                                  <Tooltip title="Edit Branch">
+                                    <button
+                                      type="button"
+                                      className="table__icon edit p-1.5 hover:bg-blue-100 rounded"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEdit?.(row);
+                                      }}
+                                    >
+                                      <i className="fa-light fa-edit text-blue-600"></i>
+                                    </button>
+                                  </Tooltip>
+                                  
+                                  {/* <Tooltip title="Delete Branch">
+                                    <button
+                                      className="table__icon delete p-1.5 hover:bg-red-100 rounded"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteId(row.id);
+                                        setModalDeleteOpen(true);
+                                      }}
+                                    >
+                                      <i className="fa-regular fa-trash text-red-600"></i>
+                                    </button>
+                                  </Tooltip> */}
+                                  
+                                  <Tooltip title="View Details">
+                                    <button
+                                      type="button"
+                                      className="table__icon p-1.5 hover:bg-green-100 rounded"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        // Navigate to branch details page
+                                        console.log("View branch details:", row.id);
+                                      }}
+                                    >
+                                      <i className="fa-light fa-eye text-green-600"></i>
+                                    </button>
+                                  </Tooltip>
+                                  
+                                  {/* <Tooltip title="Assign Employees">
+                                    <button
+                                      type="button"
+                                      className="table__icon p-1.5 hover:bg-purple-100 rounded"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        console.log("Assign employees to branch:", row.id);
+                                      }}
+                                    >
+                                      <i className="fa-light fa-user-plus text-purple-600"></i>
+                                    </button>
+                                  </Tooltip> */}
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -375,32 +561,32 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
               </Paper>
             </Box>
 
-            {/* Branch Summary */}
+            {/* Branch Summary Stats */}
             {paginatedRows.length > 0 && (
               <div className="card__wrapper mb-4">
-                <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="text-center">
                       <div className="text-sm text-gray-600">Total Branches</div>
-                      <div className="text-xl font-semibold">{filteredRows.length}</div>
+                      <div className="text-2xl font-bold text-gray-800">{summaryStats.totalBranches}</div>
+                      <div className="text-xs text-gray-500">Showing {paginatedRows.length} on this page</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-sm text-gray-600">Active</div>
-                      <div className="text-xl font-semibold text-green-600">
-                        {filteredRows.filter(b => b.status === "Active").length}
+                      <div className="text-sm text-gray-600">Active Branches</div>
+                      <div className="text-2xl font-bold text-green-600">{summaryStats.activeBranches}</div>
+                      <div className="text-xs text-gray-500">
+                        {((summaryStats.activeBranches / (summaryStats.totalBranches || 1)) * 100).toFixed(1)}% active
                       </div>
                     </div>
                     <div className="text-center">
                       <div className="text-sm text-gray-600">Total Employees</div>
-                      <div className="text-xl font-semibold text-blue-600">
-                        {filteredRows.reduce((sum, b) => sum + (b.totalEmployees || 0), 0)}
-                      </div>
+                      <div className="text-2xl font-bold text-blue-600">{summaryStats.totalEmployees}</div>
+                      <div className="text-xs text-gray-500">Across all branches</div>
                     </div>
                     <div className="text-center">
                       <div className="text-sm text-gray-600">Avg. Employees/Branch</div>
-                      <div className="text-xl font-semibold">
-                        {Math.round(filteredRows.reduce((sum, b) => sum + (b.totalEmployees || 0), 0) / filteredRows.length)}
-                      </div>
+                      <div className="text-2xl font-bold text-indigo-600">{summaryStats.avgEmployees}</div>
+                      <div className="text-xs text-gray-500">Per branch average</div>
                     </div>
                   </div>
                 </div>
@@ -409,7 +595,7 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
             
             {/* Bottom Controls Row */}
             <Grid container spacing={2} alignItems="center" className="mt-4">
-              {/* Number of Entries Dropdown - Bottom Left */}
+              {/* Number of Entries Dropdown */}
               <Grid item xs={12} md={3}>
                 <Box className="flex items-center gap-2">
                   <Typography variant="body2" className="whitespace-nowrap">
@@ -434,10 +620,10 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                 </Box>
               </Grid>
               
-              {/* Showing Entries Info - Bottom Center */}
+              {/* Showing Entries Info */}
               <Grid item xs={12} md={6}>
                 <Box className="flex flex-col items-center">
-                  <Typography variant="body2">
+                  <Typography variant="body2" className="text-gray-700">
                     {`Showing ${(page - 1) * rowsPerPage + 1} to ${Math.min(
                       page * rowsPerPage,
                       filteredRows.length
@@ -451,7 +637,7 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                 </Box>
               </Grid>
               
-              {/* Pagination - Bottom Right */}
+              {/* Pagination */}
               <Grid item xs={12} md={3}>
                 <Box className="flex justify-end">
                   <Pagination
@@ -462,6 +648,7 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                     shape="rounded"
                     className="manaz-pagination-button"
                     size="small"
+                    color="primary"
                   />
                 </Box>
               </Grid>
@@ -469,33 +656,38 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
 
             {/* Bulk Actions Bar */}
             {selected.length > 0 && (
-              <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-4 z-50">
-                <Typography variant="body2" className="text-white">
-                  {selected.length} branch{selected.length > 1 ? 'es' : ''} selected
-                </Typography>
+              <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-4 z-50 border border-blue-700">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+                    <span className="font-bold">{selected.length}</span>
+                  </div>
+                  <Typography variant="body2" className="text-white font-medium">
+                    {selected.length} branch{selected.length > 1 ? 'es' : ''} selected
+                  </Typography>
+                </div>
                 <div className="flex gap-2">
                   <button
-                    className="px-3 py-1 bg-white text-blue-600 rounded text-sm font-medium hover:bg-blue-50"
+                    className="px-3 py-1.5 bg-white text-blue-600 rounded text-sm font-medium hover:bg-blue-50 transition-colors flex items-center gap-1"
                     onClick={() => {
                       const selectedBranches = selected.map(index => filteredRows[index]);
                       console.log('Bulk export branches:', selectedBranches);
                     }}
                   >
-                    <i className="fa-regular fa-download mr-1"></i>
-                    Export Selected
+                    <i className="fa-regular fa-download"></i>
+                    Export
                   </button>
                   <button
-                    className="px-3 py-1 bg-yellow-500 text-white rounded text-sm font-medium hover:bg-yellow-600"
+                    className="px-3 py-1.5 bg-yellow-500 text-white rounded text-sm font-medium hover:bg-yellow-600 transition-colors flex items-center gap-1"
                     onClick={() => {
                       const selectedBranches = selected.map(index => filteredRows[index]);
                       console.log('Bulk toggle status:', selectedBranches);
                     }}
                   >
-                    <i className="fa-solid fa-toggle-on mr-1"></i>
+                    <i className="fa-solid fa-toggle-on"></i>
                     Toggle Status
                   </button>
-                  <button
-                    className="px-3 py-1 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600"
+                  {/* <button
+                    className="px-3 py-1.5 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600 transition-colors flex items-center gap-1"
                     onClick={() => {
                       if (confirm(`Are you sure you want to delete ${selected.length} branch${selected.length > 1 ? 'es' : ''}?`)) {
                         selected.forEach(index => {
@@ -505,14 +697,14 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                       }
                     }}
                   >
-                    <i className="fa-regular fa-trash mr-1"></i>
-                    Delete Selected
-                  </button>
+                    <i className="fa-regular fa-trash"></i>
+                    Delete
+                  </button> */}
                   <button
-                    className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm font-medium hover:bg-gray-300"
+                    className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-sm font-medium hover:bg-gray-300 transition-colors"
                     onClick={() => handleSelectAllClick(false, [])}
                   >
-                    Clear Selection
+                    Clear
                   </button>
                 </div>
               </div>
@@ -521,13 +713,17 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
         </div>
       </div>
 
-      {modalDeleteOpen && (
+      {/* Delete Confirmation Modal */}
+      {/* {modalDeleteOpen && (
         <DeleteModal
           open={modalDeleteOpen}
           setOpen={setModalDeleteOpen}
-          onConfirm={() => handleDelete(deleteId)}
+          onConfirm={() => {
+            handleDelete(deleteId);
+            setModalDeleteOpen(false);
+          }}
         />
-      )}
+      )} */}
     </>
   );
 };

@@ -42,7 +42,8 @@ export interface IEmployee {
     | "On Probation"
     | "Resigned"
     | "Terminated"
-    | "Draft";
+    | "Draft"
+    | "Inactive";
   contractStartDate?: string;
   contractEndDate?: string;
 
@@ -59,12 +60,12 @@ export interface IEmployee {
   // Attendance & Access
   attendanceType: "App" | "Biometric" | "GPS";
   presentDayStatus?: "Present" | "Absent" | "On Leave" | "Work From Home";
-  attendanceSummary?: IAttendanceSummary; // ✅ New: Backend-calculated summary
-  absenceDaysThisMonth?: number; // ✅ Kept for backward compatibility
-  presentDaysThisMonth?: number; // ✅ Kept for backward compatibility
-  leaveDaysThisMonth?: number; // ✅ Kept for backward compatibility
-  holidayDaysThisMonth?: number; // ✅ Kept for backward compatibility
-  attendancePercentage?: number; // ✅ Kept for backward compatibility
+  attendanceSummary?: IAttendanceSummary;
+  absenceDaysThisMonth?: number;
+  presentDaysThisMonth?: number;
+  leaveDaysThisMonth?: number;
+  holidayDaysThisMonth?: number;
+  attendancePercentage?: number;
 
   geoFence?: IGeoFence;
   systemUserEnabled: boolean;
@@ -85,8 +86,8 @@ export interface IAttendanceSummary {
   absent: number;
   leave: number;
   holiday: number;
-  workingDays: number; // present + absent
-  totalDays: number; // present + absent + leave + holiday
+  workingDays: number;
+  totalDays: number;
   percentage: number; // (present / workingDays) * 100
   lateArrivals: number;
   earlyDepartures: number;
@@ -304,6 +305,7 @@ export interface IGeoFence {
   address?: string;
 }
 
+
 export interface IEmployeeForm {
   // Personal Info
   firstName: string;
@@ -315,6 +317,7 @@ export interface IEmployeeForm {
   dateOfBirth?: string;
   gender?: "Male" | "Female" | "Other";
   profilePhoto?: File | string;
+  designation: string;
 
   // Address
   presentAddress: IAddress;
@@ -337,6 +340,7 @@ export interface IEmployeeForm {
   workType: "Full-time" | "Part-time" | "Contract" | "Intern";
   employmentStatus:
     | "Active"
+    | "Inactive"  // ADD THIS
     | "On Probation"
     | "Resigned"
     | "Terminated"
@@ -345,6 +349,7 @@ export interface IEmployeeForm {
   contractEndDate?: string;
 
   // Salary
+  salary_structure?: any; // ADD THIS
   salaryGrade?: string;
   costToCompany?: number;
   basicPay?: number;
@@ -392,6 +397,7 @@ export const EMPLOYMENT_STATUS_OPTIONS = [
   { value: "Resigned", label: "Resigned", color: "info" },
   { value: "Terminated", label: "Terminated", color: "error" },
   { value: "Draft", label: "Draft", color: "default" },
+  { value: "Inactive", label: "Inactive", color: "default" },
 ];
 
 export const ATTENDANCE_TYPE_OPTIONS = [
@@ -870,22 +876,12 @@ export const getEmployeeAvatar = (employee: IEmployee) => {
 // HR-specific employee statuses
 export const HR_EMPLOYMENT_STATUSES = [
   { value: "Active", label: "Active", color: "success", icon: "✓" },
-  {
-    value: "On Probation",
-    label: "On Probation",
-    color: "warning",
-    icon: "⏱️",
-  },
+  { value: "Inactive", label: "Inactive", color: "error", icon: "⏸️" },
+  { value: "On Probation", label: "On Probation", color: "warning", icon: "⏱️" },
   { value: "On Leave", label: "On Leave", color: "info", icon: "🏖️" },
-  {
-    value: "Notice Period",
-    label: "Notice Period",
-    color: "warning",
-    icon: "📝",
-  },
+  { value: "Notice Period", label: "Notice Period", color: "warning", icon: "📝" },
   { value: "Resigned", label: "Resigned", color: "info", icon: "👋" },
   { value: "Terminated", label: "Terminated", color: "error", icon: "❌" },
-  { value: "Inactive", label: "Inactive", color: "default", icon: "⏸️" },
 ];
 
 // HR quick actions
@@ -1071,3 +1067,135 @@ export interface IHRChecklistItem {
   verifiedBy?: string;
   verifiedDate?: string;
 }
+
+
+// Add these types to your EmployeeTypes.ts
+export interface IApiEmployee {
+  employee_id: number;
+  client_id: number;
+  user_id: number;
+  employee_code: string;
+  first_name: string;
+  last_name: string;
+  designation: string;
+  email: string;
+  phone: string;
+  date_of_joining: string;
+  is_active: number;
+  createdAt: string;
+  updatedAt: string;
+  
+  User?: {
+    user_id: number;
+    username: string;
+    employee_code: string;
+    userRoles?: Array<{
+      user_id: number;
+      role_id: number;
+      client_id: number;
+      role: {
+        role_id: number;
+        role_name: string;
+        description?: string;
+      }
+    }>;
+  };
+  
+  EmployeeAttributes?: Array<{
+    attribute_id: number;
+    employee_id: number;
+    attribute_key: string;
+    attribute_value: string;
+  }>;
+  
+  EmployeeSalaryStructure?: Array<{
+    salary_structure_id: number;
+    employee_id: number;
+    employee_code: string;
+    salary_structure: any;
+    effective_date: string;
+    is_active: boolean;
+  }>;
+  
+  department?: {
+    dept_id: number;
+    dept_name: string;
+  };
+  
+  branch?: {
+    branch_id: number;
+    branch_name: string;
+    address?: string;
+  };
+}
+
+// Helper function to transform API data to IEmployee
+export const transformApiEmployee = (apiEmployee: IApiEmployee): IEmployee => {
+  return {
+    employeeId: apiEmployee.employee_id.toString(),
+    employeeCode: apiEmployee.employee_code,
+    firstName: apiEmployee.first_name,
+    lastName: apiEmployee.last_name,
+    email: apiEmployee.email,
+    phoneNumber: apiEmployee.phone,
+    designation: apiEmployee.designation,
+    dateOfJoining: apiEmployee.date_of_joining,
+    
+    roleId: apiEmployee.User?.userRoles?.[0]?.role?.role_id || 0,
+    roleName: apiEmployee.User?.userRoles?.[0]?.role?.role_name || 'N/A',
+    
+    departmentId: apiEmployee.department?.dept_id || 0,
+    departmentName: apiEmployee.department?.dept_name || 'N/A',
+    
+    workLocationId: apiEmployee.branch?.branch_id || 0,
+    workLocationName: apiEmployee.branch?.branch_name || 'N/A',
+    
+    workType: "Full-time",
+    employmentStatus: apiEmployee.is_active === 1 ? "Active" : "Inactive",
+    attendanceType: "Biometric",
+    status: apiEmployee.is_active === 1 ? "Active" : "Inactive",
+    
+    presentAddress: {
+      addressLine1: "",
+      city: "",
+      state: "",
+      country: "",
+      zipCode: ""
+    },
+    
+    emergencyContactName: "",
+    emergencyContactRelation: "",
+    emergencyContactPhone: "",
+    
+    documents: [],
+    
+    costToCompany: apiEmployee.EmployeeSalaryStructure?.[0]?.salary_structure?.total || 0,
+    payFrequency: "Monthly",
+    
+    systemUserEnabled: !!apiEmployee.User?.username,
+    username: apiEmployee.User?.username || '',
+    
+    attendanceSummary: {
+      present: 0,
+      absent: 0,
+      leave: 0,
+      holiday: 0,
+      workingDays: 0,
+      totalDays: 0,
+      percentage: 0,
+      lateArrivals: 0,
+      earlyDepartures: 0,
+      overtimeHours: 0,
+      regularHours: 0,
+      averageHoursPerDay: 0
+    },
+    
+    sameAsPresentAddress: true,
+    createdAt: apiEmployee.createdAt,
+    updatedAt: apiEmployee.updatedAt,
+    createdBy: "System",
+    updatedBy: "System",
+    
+    _rawData: apiEmployee
+  };
+};

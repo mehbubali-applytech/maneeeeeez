@@ -1,7 +1,6 @@
-// AttendanceRequests.tsx
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Box,
   Paper,
@@ -29,7 +28,9 @@ import {
   Divider,
   Card,
   CardContent,
-  Autocomplete
+  Autocomplete,
+  CircularProgress,
+  Snackbar
 } from "@mui/material";
 import {
   Search,
@@ -48,18 +49,20 @@ import {
   ArrowUpward,
   ArrowDownward
 } from "@mui/icons-material";
-import { IAttendanceCorrectionRequest } from "./AttendanceTypes";
+import { ICorrectedAttendance, ICorrectionActionPayload } from "./AttendanceTypes";
+import { 
+  getCorrectedAttendance, 
+  approveAbsentCorrection 
+} from "./attendanceApi";
 
 interface AttendanceRequestsProps {
-  requests?: IAttendanceCorrectionRequest[];
   onApprove?: (requestId: string) => void;
   onReject?: (requestId: string) => void;
-  onViewDetails?: (request: IAttendanceCorrectionRequest) => void;
-  onExport?: (data: IAttendanceCorrectionRequest[]) => void;
+  onViewDetails?: (request: ICorrectedAttendance) => void;
+  onExport?: (data: ICorrectedAttendance[]) => void;
 }
 
 const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
-  requests = [],
   onApprove,
   onReject,
   onViewDetails,
@@ -67,125 +70,161 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
-  const [filterDepartment, setFilterDepartment] = useState("All");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [sortBy, setSortBy] = useState<'date' | 'employee'>('date');
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [selectedRequest, setSelectedRequest] = useState<IAttendanceCorrectionRequest | null>(null);
+  const [requests, setRequests] = useState<ICorrectedAttendance[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedRequest, setSelectedRequest] = useState<ICorrectedAttendance | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success' as 'success' | 'error'
+  });
 
-  // Mock data
-  const mockRequests: IAttendanceCorrectionRequest[] = useMemo(() => [
-    {
-      id: "REQ001",
-      attendanceId: "ATT001",
-      employeeId: "EMP001",
-      employeeName: "Rajesh Kumar",
-      date: "2024-01-15",
-      currentCheckIn: "09:45",
-      currentCheckOut: "18:00",
-      requestedCheckIn: "09:00",
-      requestedCheckOut: "18:00",
-      reason: "Forgot to check-in on time due to meeting",
-      status: "Pending",
-      type: "Incorrect Time",
-      submittedAt: "2024-01-15T10:30:00Z",
-      supportingDocuments: ["meeting_invite.pdf"]
-    },
-    {
-      id: "REQ002",
-      attendanceId: "ATT002",
-      employeeId: "EMP002",
-      employeeName: "Priya Sharma",
-      date: "2024-01-14",
-      currentCheckIn: "14:30",
-      currentCheckOut: "22:00",
-      requestedCheckIn: "14:00",
-      requestedCheckOut: "22:00",
-      reason: "Late check-in due to client call",
-      status: "Approved",
-      type: "Incorrect Time",
-      submittedAt: "2024-01-14T15:00:00Z",
-      reviewedBy: "HR001",
-      reviewedAt: "2024-01-14T16:30:00Z",
-      reviewNotes: "Approved with note to maintain punctuality"
-    },
-    {
-      id: "REQ003",
-      attendanceId: "ATT003",
-      employeeId: "EMP003",
-      employeeName: "Amit Patel",
-      date: "2024-01-13",
-      currentCheckIn: "09:00",
-      currentCheckOut: "17:00",
-      requestedCheckIn: "09:00",
-      requestedCheckOut: "18:00",
-      reason: "Forgot to check-out",
-      status: "Rejected",
-      type: "Missing Out",
-      submittedAt: "2024-01-13T18:30:00Z",
-      reviewedBy: "HR001",
-      reviewedAt: "2024-01-14T10:00:00Z",
-      reviewNotes: "Rejected - no supporting evidence provided"
-    },
-    {
-      id: "REQ004",
-      attendanceId: "ATT004",
-      employeeId: "EMP004",
-      employeeName: "Sneha Reddy",
-      date: "2024-01-12",
-      currentCheckIn: undefined,
-      currentCheckOut: undefined,
-      requestedCheckIn: "09:30",
-      requestedCheckOut: "18:30",
-      reason: "System error - attendance not recorded",
-      status: "Pending",
-      type: "Absent",
-      submittedAt: "2024-01-12T19:00:00Z",
-      supportingDocuments: ["error_screenshot.png", "system_log.txt"]
+  // Fetch corrected attendance data
+  useEffect(() => {
+    fetchCorrectedAttendance();
+  }, []);
+
+  const fetchCorrectedAttendance = async () => {
+    try {
+      setLoading(true);
+      const response = await getCorrectedAttendance(filterStatus !== "All" ? filterStatus : undefined);
+      
+      if (response && response.data) {
+        // Transform and validate the API response
+        const validatedRequests = transformAndValidateApiResponse(response.data);
+        setRequests(validatedRequests);
+      } else {
+        setRequests([]);
+      }
+    } catch (error) {
+      console.error('Error fetching corrected attendance:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to load correction requests',
+        severity: 'error'
+      });
+      setRequests([]);
+    } finally {
+      setLoading(false);
     }
-  ], []);
+  };
 
-  const data = requests.length > 0 ? requests : mockRequests;
+  // Helper function to transform and validate API response
+  const transformAndValidateApiResponse = (apiData: any[]): ICorrectedAttendance[] => {
+    return apiData.map(item => ({
+      corrected_attendance_id: item.corrected_attendance_id || 0,
+      employee_id: item.employee_id || 0,
+      employee_code: item.employee_code || item.Employee?.employee_code || 'N/A',
+      first_name: item.first_name || item.Employee?.first_name || 'Unknown',
+      last_name: item.last_name || item.Employee?.last_name || '',
+      designation: item.designation || item.Employee?.designation || 'N/A',
+      attendance_date: item.attendance_date || new Date().toISOString().split('T')[0],
+      check_in: item.check_in || '--:--',
+      check_out: item.check_out || '--:--',
+      shift_id: item.shift_id || 0,
+      location: item.location || 'Not specified',
+      source: item.source || 'manual',
+      reason: item.reason || 'No reason provided',
+      status: item.status || 'Need Approval',
+      approved_by: item.approved_by,
+      approved_at: item.approved_at,
+      actions: item.actions || {},
+      created_at: item.created_at || new Date().toISOString(),
+      updated_at: item.updated_at || new Date().toISOString()
+    }));
+  };
 
   // Status options for Autocomplete
   const statusOptions = useMemo(() => [
     { label: "All Status", value: "All" },
-    { label: "Pending", value: "Pending" },
+    { label: "Need Approval", value: "Need Approval" },
     { label: "Approved", value: "Approved" },
     { label: "Rejected", value: "Rejected" }
   ], []);
 
-  // Sort options for Autocomplete
-  const sortOptions = useMemo(() => [
-    { label: "Date (Newest First)", value: { by: 'date', order: 'desc' } },
-    { label: "Date (Oldest First)", value: { by: 'date', order: 'asc' } },
-    { label: "Employee Name (A-Z)", value: { by: 'employee', order: 'asc' } },
-    { label: "Employee Name (Z-A)", value: { by: 'employee', order: 'desc' } }
-  ], []);
+  const handleApprove = async (correctedAttendanceId: number) => {
+    try {
+      const payload = {
+        status: "Approved",
+        approved_by: 1, // Replace with actual user ID from auth
+        notes: "Approved by admin"
+      };
 
-  // Get current sort selection for Autocomplete
-  const currentSort = useMemo(() => {
-    const option = sortOptions.find(opt => 
-      opt.value.by === sortBy && opt.value.order === sortOrder
-    );
-    return option || sortOptions[0];
-  }, [sortBy, sortOrder, sortOptions]);
+      const response = await approveAbsentCorrection(correctedAttendanceId, payload);
+      
+      if (response && response.errorCode === 0) {
+        setSnackbar({
+          open: true,
+          message: 'Correction request approved successfully',
+          severity: 'success'
+        });
+        fetchCorrectedAttendance(); // Refresh data
+      }
+    } catch (error) {
+      console.error('Error approving correction:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to approve correction request',
+        severity: 'error'
+      });
+    } finally {
+      setApproveDialogOpen(false);
+    }
+  };
+
+  const handleReject = async (correctedAttendanceId: number) => {
+    try {
+      const payload = {
+        status: "Rejected",
+        approved_by: 1, // Replace with actual user ID from auth
+        notes: rejectReason || "Request rejected"
+      };
+
+      const response = await approveAbsentCorrection(correctedAttendanceId, payload);
+      
+      if (response && response.errorCode === 0) {
+        setSnackbar({
+          open: true,
+          message: 'Correction request rejected successfully',
+          severity: 'success'
+        });
+        fetchCorrectedAttendance(); // Refresh data
+      }
+    } catch (error) {
+      console.error('Error rejecting correction:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to reject correction request',
+        severity: 'error'
+      });
+    } finally {
+      setRejectDialogOpen(false);
+      setRejectReason("");
+    }
+  };
 
   const filteredData = useMemo(() => {
-    let filtered = [...data];
+    let filtered = [...requests];
     
     // Filter by search query
     if (searchQuery) {
-      filtered = filtered.filter(request =>
-        request.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        request.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        request.reason.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      filtered = filtered.filter(request => {
+        const fullName = `${request.first_name || ''} ${request.last_name || ''}`.toLowerCase();
+        const employeeCode = request.employee_code?.toLowerCase() || '';
+        const reason = request.reason?.toLowerCase() || '';
+        
+        return (
+          fullName.includes(searchQuery.toLowerCase()) ||
+          employeeCode.includes(searchQuery.toLowerCase()) ||
+          reason.includes(searchQuery.toLowerCase())
+        );
+      });
     }
     
     // Filter by status
@@ -193,36 +232,35 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
       filtered = filtered.filter(request => request.status === filterStatus);
     }
     
-    // Filter by department (mock implementation)
-    if (filterDepartment !== "All") {
-      filtered = filtered.filter(request => {
-        // In real app, would filter by employee department
-        return true;
-      });
-    }
-    
-    // Sort
-    filtered.sort((a, b) => {
-      let comparison = 0;
-      if (sortBy === 'date') {
-        comparison = new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime();
-      } else {
-        comparison = a.employeeName.localeCompare(b.employeeName);
-      }
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-    
     return filtered;
-  }, [data, searchQuery, filterStatus, filterDepartment, sortBy, sortOrder]);
+  }, [requests, searchQuery, filterStatus]);
 
   const paginatedData = useMemo(() => {
     const startIndex = page * rowsPerPage;
     return filteredData.slice(startIndex, startIndex + rowsPerPage);
   }, [filteredData, page, rowsPerPage]);
 
+  // Get avatar initials safely
+  const getAvatarInitials = (request: ICorrectedAttendance) => {
+    if (request.first_name && request.first_name.trim()) {
+      return request.first_name.charAt(0).toUpperCase();
+    }
+    if (request.employee_code && request.employee_code.trim()) {
+      return request.employee_code.charAt(0).toUpperCase();
+    }
+    return '?';
+  };
+
+  // Get full name safely
+  const getFullName = (request: ICorrectedAttendance) => {
+    const firstName = request.first_name || '';
+    const lastName = request.last_name || '';
+    return `${firstName} ${lastName}`.trim() || 'Unknown Employee';
+  };
+
   const getStatusBadge = (status: string) => {
     switch(status) {
-      case 'Pending':
+      case 'Need Approval':
         return <Chip icon={<Pending />} label="Pending" color="warning" size="small" />;
       case 'Approved':
         return <Chip icon={<CheckCircle />} label="Approved" color="success" size="small" />;
@@ -234,59 +272,38 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
   };
 
   const getStatusCount = () => {
-    const pending = data.filter(r => r.status === 'Pending').length;
-    const approved = data.filter(r => r.status === 'Approved').length;
-    const rejected = data.filter(r => r.status === 'Rejected').length;
-    return { pending, approved, rejected, total: data.length };
+    const pending = requests.filter(r => r.status === 'Need Approval').length;
+    const approved = requests.filter(r => r.status === 'Approved').length;
+    const rejected = requests.filter(r => r.status === 'Rejected').length;
+    return { pending, approved, rejected, total: requests.length };
   };
 
   const statusCount = getStatusCount();
 
-  const handleApprove = (requestId: string) => {
-    setApproveDialogOpen(false);
-    if (onApprove) {
-      onApprove(requestId);
-    } else {
-      console.log(`Approved request ${requestId}`);
-      alert(`Request ${requestId} approved`);
-    }
-  };
-
-  const handleReject = (requestId: string) => {
-    setRejectDialogOpen(false);
-    setRejectReason("");
-    if (onReject) {
-      onReject(requestId);
-    } else {
-      console.log(`Rejected request ${requestId} with reason: ${rejectReason}`);
-      alert(`Request ${requestId} rejected`);
-    }
-  };
-
-  const handleViewDetails = (request: IAttendanceCorrectionRequest) => {
-    setSelectedRequest(request);
-    setDetailDialogOpen(true);
-    if (onViewDetails) {
-      onViewDetails(request);
-    }
-  };
-
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
+    try {
+      return new Date(dateString).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch {
+      return 'Invalid Date';
+    }
   };
 
   const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    try {
+      return new Date(dateString).toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'Invalid Date';
+    }
   };
 
   return (
@@ -298,14 +315,27 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
             <History /> Attendance Correction Requests
           </Typography>
           
-          <Button
-            variant="outlined"
-            startIcon={<Download />}
-            onClick={() => onExport?.(data)}
-            size="small"
-          >
-            Export
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<Refresh />}
+              onClick={fetchCorrectedAttendance}
+              disabled={loading}
+              size="small"
+            >
+              Refresh
+            </Button>
+            
+            <Button
+              variant="outlined"
+              startIcon={<Download />}
+              onClick={() => onExport?.(requests)}
+              size="small"
+              disabled={requests.length === 0}
+            >
+              Export
+            </Button>
+          </Box>
         </Box>
         
         {/* Summary Stats */}
@@ -348,11 +378,11 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={6}>
             <TextField
               fullWidth
               size="small"
-              placeholder="Search by employee or reason..."
+              placeholder="Search by employee name, code, or reason..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               InputProps={{
@@ -365,7 +395,7 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
             />
           </Grid>
           
-          <Grid item xs={12} md={3}>
+          <Grid item xs={12} md={4}>
             <Autocomplete
               fullWidth
               size="small"
@@ -379,48 +409,10 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
                   {...params}
                   label="Status"
                   placeholder="Select status"
-                 
                 />
               )}
               renderOption={(props, option) => (
-                <li 
-                  {...props} 
-                  key={option.value}
-                >
-                  {option.label}
-                </li>
-              )}
-            />
-          </Grid>
-          
-          <Grid item xs={12} md={3}>
-            <Autocomplete
-              fullWidth
-              size="small"
-              options={sortOptions}
-              value={currentSort}
-              onChange={(event, newValue) => {
-                if (newValue) {
-                  setSortBy(newValue.value.by as 'date' | 'employee');
-                  setSortOrder(newValue.value.order as 'asc' | 'desc');
-                } else {
-                  setSortBy('date');
-                  setSortOrder('desc');
-                }
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Sort By"
-                  placeholder="Select sort order"
-                 
-                />
-              )}
-              renderOption={(props, option) => (
-                <li 
-                  {...props} 
-                  key={`${option.value.by}-${option.value.order}`}
-                >
+                <li {...props} key={option.value}>
                   {option.label}
                 </li>
               )}
@@ -434,7 +426,6 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
               onClick={() => {
                 setSearchQuery("");
                 setFilterStatus("All");
-                setFilterDepartment("All");
               }}
               fullWidth
             >
@@ -444,207 +435,176 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
         </Grid>
       </Paper>
 
-      {/* Requests Table */}
-      <TableContainer component={Paper}>
-  <Table
-    sx={{
-      '& .MuiTableCell-root': {
-        color: '#000',
-      },
-      '& .MuiTypography-root': {
-        color: '#000',
-      },
-    }}
-  >
+      {/* Loading State */}
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
+        </Box>
+      )}
 
-          <TableHead>
-            <TableRow sx={{ bgcolor: 'grey.100' }}>
-              <TableCell>Employee</TableCell>
-              <TableCell>Date</TableCell>
-              <TableCell align="center">Current Time</TableCell>
-              <TableCell align="center">Requested Time</TableCell>
-              <TableCell>Reason</TableCell>
-              <TableCell align="center">Status</TableCell>
-              <TableCell align="center">Submitted</TableCell>
-              <TableCell align="center">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          
-          <TableBody>
-            {paginatedData.map((request) => (
-              <TableRow 
-                key={request.id}
-                hover
-                sx={{ 
-                  ...(request.status === 'Pending' && { bgcolor: '#ffd7a3' }),
-                  ...(request.status === 'Rejected' && { bgcolor: 'error.lighter' })
-                }}
-              >
-                {/* Employee */}
-                <TableCell>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Avatar sx={{ width: 32, height: 32, fontSize: 14 }}>
-                      {request.employeeName.charAt(0)}
-                    </Avatar>
-                    <Box>
-                      <Typography variant="body2" fontWeight={600}>
-                        {request.employeeName}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {request.employeeId}
-                      </Typography>
-                    </Box>
-                  </Box>
-                </TableCell>
-                
-                {/* Date */}
-                <TableCell>
-                  <Typography variant="body2">
-                    {formatDate(request.date)}
-                  </Typography>
-                </TableCell>
-                
-                {/* Current Time */}
-                <TableCell align="center">
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                    {request.currentCheckIn ? (
-                      <Typography variant="body2" color="text.secondary">
-                        In: {request.currentCheckIn}
-                      </Typography>
-                    ) : (
-                      <Typography variant="caption" color="error">
-                        No check-in
-                      </Typography>
-                    )}
-                    {request.currentCheckOut ? (
-                      <Typography variant="body2" color="text.secondary">
-                        Out: {request.currentCheckOut}
-                      </Typography>
-                    ) : (
-                      <Typography variant="caption" color="error">
-                        No check-out
-                      </Typography>
-                    )}
-                  </Box>
-                </TableCell>
-                
-                {/* Requested Time */}
-                <TableCell align="center">
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                    {request.requestedCheckIn ? (
-                      <Typography variant="body2" fontWeight={600}>
-                        In: {request.requestedCheckIn}
-                      </Typography>
-                    ) : (
-                      <Typography variant="caption" color="text.secondary">
-                        —
-                      </Typography>
-                    )}
-                    {request.requestedCheckOut ? (
-                      <Typography variant="body2" fontWeight={600}>
-                        Out: {request.requestedCheckOut}
-                      </Typography>
-                    ) : (
-                      <Typography variant="caption" color="text.secondary">
-                        —
-                      </Typography>
-                    )}
-                  </Box>
-                </TableCell>
-                
-                {/* Reason */}
-                <TableCell>
-                  <Tooltip title={request.reason}>
-                    <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
-                      {request.reason.length > 50 ? `${request.reason.substring(0, 50)}...` : request.reason}
-                    </Typography>
-                  </Tooltip>
-                  {request.supportingDocuments && request.supportingDocuments.length > 0 && (
-                    <Typography variant="caption" color="primary">
-                      {request.supportingDocuments.length} document(s)
-                    </Typography>
-                  )}
-                </TableCell>
-                
-                {/* Status */}
-                <TableCell align="center">
-                  {getStatusBadge(request.status)}
-                </TableCell>
-                
-                {/* Submitted */}
-                <TableCell align="center">
-                  <Typography variant="caption">
-                    {formatDateTime(request.submittedAt)}
-                  </Typography>
-                </TableCell>
-                
-                {/* Actions */}
-                <TableCell align="center">
-                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                    <Tooltip title="View Details">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleViewDetails(request)}
-                      >
-                        <Visibility fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+      {/* Requests Table */}
+      {!loading && filteredData.length > 0 && (
+        <>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.100' }}>
+                  <TableCell>Employee</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell align="center">Check-In</TableCell>
+                  <TableCell align="center">Check-Out</TableCell>
+                  <TableCell>Reason</TableCell>
+                  <TableCell align="center">Status</TableCell>
+                  <TableCell align="center">Submitted</TableCell>
+                  <TableCell align="center">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              
+              <TableBody>
+                {paginatedData.map((request) => (
+                  <TableRow 
+                    key={request.corrected_attendance_id}
+                    hover
+                    sx={{ 
+                      ...(request.status === 'Need Approval' && { bgcolor: '#ffd7a3' }),
+                      ...(request.status === 'Rejected' && { bgcolor: 'error.lighter' })
+                    }}
+                  >
+                    {/* Employee */}
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar sx={{ width: 32, height: 32, fontSize: 14, bgcolor: 'primary.main' }}>
+                          {getAvatarInitials(request)}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body2" fontWeight={600}>
+                            {getFullName(request)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {request.employee_code} • {request.designation}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </TableCell>
                     
-                    {request.status === 'Pending' && (
-                      <>
-                        <Tooltip title="Approve Request">
+                    {/* Date */}
+                    <TableCell>
+                      <Typography variant="body2">
+                        {formatDate(request.attendance_date)}
+                      </Typography>
+                    </TableCell>
+                    
+                    {/* Check-In */}
+                    <TableCell align="center">
+                      <Typography variant="body2" fontWeight={600}>
+                        {request.check_in}
+                      </Typography>
+                    </TableCell>
+                    
+                    {/* Check-Out */}
+                    <TableCell align="center">
+                      <Typography variant="body2" fontWeight={600}>
+                        {request.check_out}
+                      </Typography>
+                    </TableCell>
+                    
+                    {/* Reason */}
+                    <TableCell>
+                      <Tooltip title={request.reason}>
+                        <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
+                          {request.reason && request.reason.length > 50 
+                            ? `${request.reason.substring(0, 50)}...` 
+                            : request.reason || 'No reason provided'}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                    
+                    {/* Status */}
+                    <TableCell align="center">
+                      {getStatusBadge(request.status)}
+                    </TableCell>
+                    
+                    {/* Submitted */}
+                    <TableCell align="center">
+                      <Typography variant="caption">
+                        {formatDateTime(request.created_at)}
+                      </Typography>
+                    </TableCell>
+                    
+                    {/* Actions */}
+                    <TableCell align="center">
+                      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                        <Tooltip title="View Details">
                           <IconButton
                             size="small"
-                            color="success"
                             onClick={() => {
                               setSelectedRequest(request);
-                              setApproveDialogOpen(true);
+                              setDetailDialogOpen(true);
                             }}
                           >
-                            <CheckCircle fontSize="small" />
+                            <Visibility fontSize="small" />
                           </IconButton>
                         </Tooltip>
                         
-                        <Tooltip title="Reject Request">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => {
-                              setSelectedRequest(request);
-                              setRejectDialogOpen(true);
-                            }}
-                          >
-                            <Cancel fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </>
-                    )}
-                  </Box>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        
-        <TablePagination
-          component="div"
-          count={filteredData.length}
-          page={page}
-          onPageChange={(_, newPage) => setPage(newPage)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10));
-            setPage(0);
-          }}
-          rowsPerPageOptions={[5, 10, 25, 50]}
-        />
-      </TableContainer>
+                        {request.status === 'Need Approval' && (
+                          <>
+                            <Tooltip title="Approve Request">
+                              <IconButton
+                                size="small"
+                                color="success"
+                                onClick={() => {
+                                  setSelectedRequest(request);
+                                  setApproveDialogOpen(true);
+                                }}
+                              >
+                                <CheckCircle fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            
+                            <Tooltip title="Reject Request">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => {
+                                  setSelectedRequest(request);
+                                  setRejectDialogOpen(true);
+                                }}
+                              >
+                                <Cancel fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </>
+                        )}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            
+            <TablePagination
+              component="div"
+              count={filteredData.length}
+              page={page}
+              onPageChange={(_, newPage) => setPage(newPage)}
+              rowsPerPage={rowsPerPage}
+              onRowsPerPageChange={(e) => {
+                setRowsPerPage(parseInt(e.target.value, 10));
+                setPage(0);
+              }}
+              rowsPerPageOptions={[5, 10, 25, 50]}
+            />
+          </TableContainer>
+        </>
+      )}
 
       {/* Empty State */}
-      {filteredData.length === 0 && (
+      {!loading && filteredData.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           <Typography>
-            No correction requests found for the selected filters.
+            {requests.length === 0 
+              ? 'No correction requests found.' 
+              : 'No correction requests found for the selected filters.'}
           </Typography>
         </Alert>
       )}
@@ -665,13 +625,15 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
               <Grid container spacing={3}>
                 <Grid item xs={12}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                    <Avatar sx={{ width: 56, height: 56 }}>
-                      {selectedRequest.employeeName.charAt(0)}
+                    <Avatar sx={{ width: 56, height: 56, bgcolor: 'primary.main' }}>
+                      {getAvatarInitials(selectedRequest)}
                     </Avatar>
                     <Box>
-                      <Typography variant="h6">{selectedRequest.employeeName}</Typography>
+                      <Typography variant="h6">
+                        {getFullName(selectedRequest)}
+                      </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {selectedRequest.employeeId}
+                        {selectedRequest.employee_code} • {selectedRequest.designation}
                       </Typography>
                     </Box>
                     <Box sx={{ ml: 'auto' }}>
@@ -684,33 +646,33 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" gutterBottom>Date</Typography>
                   <Typography variant="body2">
-                    {formatDate(selectedRequest.date)}
+                    {formatDate(selectedRequest.attendance_date)}
                   </Typography>
                 </Grid>
                 
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" gutterBottom>Submitted</Typography>
                   <Typography variant="body2">
-                    {formatDateTime(selectedRequest.submittedAt)}
+                    {formatDateTime(selectedRequest.created_at)}
                   </Typography>
                 </Grid>
                 
                 <Grid item xs={12} md={6}>
                   <Card variant="outlined" sx={{ p: 2 }}>
                     <Typography variant="subtitle2" gutterBottom color="text.secondary">
-                      Current Attendance
+                      Requested Times
                     </Typography>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Box>
                         <Typography variant="caption">Check-In</Typography>
-                        <Typography variant="body2">
-                          {selectedRequest.currentCheckIn || 'Not recorded'}
+                        <Typography variant="body2" fontWeight={600}>
+                          {selectedRequest.check_in}
                         </Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption">Check-Out</Typography>
-                        <Typography variant="body2">
-                          {selectedRequest.currentCheckOut || 'Not recorded'}
+                        <Typography variant="body2" fontWeight={600}>
+                          {selectedRequest.check_out}
                         </Typography>
                       </Box>
                     </Box>
@@ -718,21 +680,21 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
                 </Grid>
                 
                 <Grid item xs={12} md={6}>
-                  <Card variant="outlined" sx={{ p: 2, borderColor: 'primary.main' }}>
-                    <Typography variant="subtitle2" gutterBottom color="primary">
-                      Requested Changes
+                  <Card variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom color="text.secondary">
+                      Source & Location
                     </Typography>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Box>
-                        <Typography variant="caption">Check-In</Typography>
-                        <Typography variant="body2" fontWeight={600}>
-                          {selectedRequest.requestedCheckIn || 'No change'}
+                        <Typography variant="caption">Source</Typography>
+                        <Typography variant="body2">
+                          {selectedRequest.source}
                         </Typography>
                       </Box>
                       <Box>
-                        <Typography variant="caption">Check-Out</Typography>
-                        <Typography variant="body2" fontWeight={600}>
-                          {selectedRequest.requestedCheckOut || 'No change'}
+                        <Typography variant="caption">Location</Typography>
+                        <Typography variant="body2">
+                          {selectedRequest.location || 'Not specified'}
                         </Typography>
                       </Box>
                     </Box>
@@ -743,48 +705,26 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
                   <Typography variant="subtitle2" gutterBottom>Reason for Correction</Typography>
                   <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
                     <Typography variant="body2">
-                      {selectedRequest.reason}
+                      {selectedRequest.reason || 'No reason provided'}
                     </Typography>
                   </Paper>
                 </Grid>
                 
-                {selectedRequest.supportingDocuments && selectedRequest.supportingDocuments.length > 0 && (
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" gutterBottom>Supporting Documents</Typography>
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      {selectedRequest.supportingDocuments.map((doc, index) => (
-                        <Chip
-                          key={index}
-                          label={doc}
-                          size="small"
-                          onClick={() => window.open(`/documents/${doc}`, '_blank')}
-                        />
-                      ))}
-                    </Box>
-                  </Grid>
-                )}
-                
-                {selectedRequest.reviewedBy && (
+                {selectedRequest.approved_by && (
                   <>
                     <Grid item xs={12}>
                       <Typography variant="subtitle2" gutterBottom>Review Details</Typography>
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Typography variant="caption">Reviewed By</Typography>
+                      <Typography variant="caption">Approved By</Typography>
                       <Typography variant="body2">
-                        {selectedRequest.reviewedBy}
+                        User ID: {selectedRequest.approved_by}
                       </Typography>
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Typography variant="caption">Reviewed At</Typography>
+                      <Typography variant="caption">Approved At</Typography>
                       <Typography variant="body2">
-                        {selectedRequest.reviewedAt ? formatDateTime(selectedRequest.reviewedAt) : 'N/A'}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Typography variant="caption">Review Notes</Typography>
-                      <Typography variant="body2">
-                        {selectedRequest.reviewNotes || 'No notes provided'}
+                        {selectedRequest.approved_at ? formatDateTime(selectedRequest.approved_at) : 'N/A'}
                       </Typography>
                     </Grid>
                   </>
@@ -805,13 +745,13 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
           {selectedRequest && (
             <Box>
               <Typography gutterBottom>
-                Are you sure you want to approve the correction request for {selectedRequest.employeeName}?
+                Are you sure you want to approve the correction request for {getFullName(selectedRequest)}?
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Date: {formatDate(selectedRequest.date)}
+                Date: {formatDate(selectedRequest.attendance_date)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Request: {selectedRequest.currentCheckIn || 'None'} → {selectedRequest.requestedCheckIn}
+                Time: {selectedRequest.check_in} - {selectedRequest.check_out}
               </Typography>
             </Box>
           )}
@@ -819,7 +759,7 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
         <DialogActions>
           <Button onClick={() => setApproveDialogOpen(false)}>Cancel</Button>
           <Button 
-            onClick={() => selectedRequest && handleApprove(selectedRequest.id)} 
+            onClick={() => selectedRequest && handleApprove(selectedRequest.corrected_attendance_id)} 
             variant="contained" 
             className="!text-white"
           >
@@ -835,7 +775,7 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
           {selectedRequest && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
               <Typography>
-                Are you sure you want to reject the correction request for {selectedRequest.employeeName}?
+                Are you sure you want to reject the correction request for {getFullName(selectedRequest)}?
               </Typography>
               
               <TextField
@@ -853,7 +793,7 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
         <DialogActions>
           <Button onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
           <Button 
-            onClick={() => selectedRequest && handleReject(selectedRequest.id)} 
+            onClick={() => selectedRequest && handleReject(selectedRequest.corrected_attendance_id)} 
             variant="contained" 
             color="error"
             disabled={!rejectReason.trim()}
@@ -862,6 +802,14 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        message={snackbar.message}
+      />
     </Box>
   );
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Box,
   Tabs,
@@ -13,7 +13,10 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  Chip
+  Chip,
+  CircularProgress,
+  Snackbar,
+  AlertColor
 } from "@mui/material";
 import {
   AccessTime,
@@ -28,138 +31,19 @@ import {
 import Link from "next/link";
 
 import SummarySingleCard from "@/components/common/SummarySingleCard";
-
 import LiveAttendanceMonitor from "./LiveAttendanceMonitor";
 import AttendanceLogs from "./AttendanceLogs";
 import AttendanceRequests from "./AttendanceRequests";
 import EmployeeAttendanceTable from "./EmployeeAttendanceTable";
 import ManualCorrectionModal from "./ManualCorrectionModal";
-import { IAttendanceRecord, IAttendanceCorrectionRequest } from "./AttendanceTypes";
-
-const generateTodayAttendance = (): IAttendanceRecord[] => {
-  const today = new Date().toISOString().split('T')[0];
-  
-  return [
-    {
-      id: "1",
-      employeeId: "EMP001",
-      employeeName: "Rajesh Kumar",
-      department: "Engineering",
-      role: "Software Engineer",
-      shiftId: 1,
-      shiftName: "Morning Shift",
-      shiftStartTime: "09:00",
-      shiftEndTime: "18:00",
-      date: today,
-      checkInTime: "08:55",
-      checkOutTime: "18:10",
-      checkInLocation: "Bangalore Office",
-      totalHours: 9.25,
-      attendanceStatus: "Present",
-      isManualEntry: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "2",
-      employeeId: "EMP002",
-      employeeName: "Priya Sharma",
-      department: "Marketing",
-      role: "Marketing Manager",
-      shiftId: 2,
-      shiftName: "Evening Shift",
-      shiftStartTime: "14:00",
-      shiftEndTime: "22:00",
-      date: today,
-      checkInTime: "14:25",
-      checkOutTime: undefined,
-      checkInLocation: "Delhi Office",
-      totalHours: 0,
-      attendanceStatus: "Late",
-      lateMinutes: 25,
-      isManualEntry: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "3",
-      employeeId: "EMP003",
-      employeeName: "Amit Patel",
-      department: "Sales",
-      role: "Sales Executive",
-      shiftId: 1,
-      shiftName: "Morning Shift",
-      shiftStartTime: "09:00",
-      shiftEndTime: "18:00",
-      date: today,
-      checkInTime: "09:15",
-      checkOutTime: "18:15",
-      checkInLocation: "Mumbai Office",
-      totalHours: 9,
-      attendanceStatus: "Present",
-      isManualEntry: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "4",
-      employeeId: "EMP004",
-      employeeName: "Sneha Reddy",
-      department: "HR",
-      role: "HR Manager",
-      shiftId: 1,
-      shiftName: "Morning Shift",
-      shiftStartTime: "09:00",
-      shiftEndTime: "18:00",
-      date: today,
-      checkInTime: undefined,
-      checkOutTime: undefined,
-      attendanceStatus: "Absent",
-      isManualEntry: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ];
-};
-
-const generateCorrectionRequests = (): IAttendanceCorrectionRequest[] => {
-  return [
-    {
-      id: "REQ001",
-      attendanceId: "ATT001",
-      employeeId: "EMP001",
-      employeeName: "Rajesh Kumar",
-      date: "2024-01-15",
-      currentCheckIn: "09:45",
-      currentCheckOut: "18:00",
-      requestedCheckIn: "09:00",
-      requestedCheckOut: "18:00",
-      reason: "Forgot to check-in on time due to meeting",
-      status: "Pending",
-      type: "Incorrect Time", 
-      submittedAt: "2024-01-15T10:30:00Z",
-      supportingDocuments: ["meeting_invite.pdf"]
-    },
-    {
-      id: "REQ002",
-      attendanceId: "ATT002",
-      employeeId: "EMP002",
-      employeeName: "Priya Sharma",
-      date: "2024-01-14",
-      currentCheckIn: "14:30",
-      currentCheckOut: "22:00",
-      requestedCheckIn: "14:00",
-      requestedCheckOut: "22:00",
-      reason: "Late check-in due to client call",
-      status: "Approved",
-      type: "Incorrect Time", 
-      submittedAt: "2024-01-14T15:00:00Z",
-      reviewedBy: "HR001",
-      reviewedAt: "2024-01-14T16:30:00Z",
-      reviewNotes: "Approved with note to maintain punctuality"
-    }
-  ];
-};
+import { 
+  IAttendanceRecord, 
+  IAttendanceCorrectionRequest, 
+  ICompanyAttendanceSummary,
+  ICorrectedAttendance 
+} from "./AttendanceTypes";
+import axios from "axios";
+import { getCorrectedAttendance } from "./attendanceApi";
 
 const EmployeeAttendanceMainArea: React.FC = () => {
   // State for tabs
@@ -167,85 +51,267 @@ const EmployeeAttendanceMainArea: React.FC = () => {
   
   // State for modals
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
+  const [attendanceSummary, setAttendanceSummary] = useState<ICompanyAttendanceSummary>();
+  const [selectedAttendanceRecord, setSelectedAttendanceRecord] = useState<IAttendanceRecord | null>(null);
   
   // State for data
-  const [todayAttendance, setTodayAttendance] = useState<IAttendanceRecord[]>(generateTodayAttendance());
-  const [correctionRequests, setCorrectionRequests] = useState<IAttendanceCorrectionRequest[]>(generateCorrectionRequests());
+  const [todayAttendance, setTodayAttendance] = useState<IAttendanceRecord[]>([]);
+  const [correctionRequests, setCorrectionRequests] = useState<ICorrectedAttendance[]>([]);
+  
+  // State for loading
+  const [loading, setLoading] = useState({
+    summary: false,
+    liveAttendance: false,
+    correctionRequests: false
+  });
+  
+  // State for errors
+  const [errors, setErrors] = useState<string[]>([]);
+  
+  // State for snackbar
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success' as AlertColor
+  });
   
   // State for filters
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  
+
+  // Fetch all data on component mount
+  useEffect(() => {
+    fetchAllData();
+  }, []);
+
+  // Refresh data when tab changes
+  useEffect(() => {
+    if (activeTab === 0) {
+      fetchLiveAttendance();
+    } else if (activeTab === 3) {
+      fetchCorrectionRequests();
+    }
+  }, [activeTab]);
+
+  const fetchAllData = async () => {
+    try {
+      await Promise.all([
+        fetchAttendanceSummary(),
+        fetchLiveAttendance(),
+        fetchCorrectionRequests()
+      ]);
+    } catch (error) {
+      console.error("Error fetching all data:", error);
+      setErrors(prev => [...prev, "Failed to fetch some data. Please refresh."]);
+      showSnackbar("Failed to load some data", "error");
+    }
+  };
+
+  const fetchAttendanceSummary = async () => {
+    try {
+      setLoading(prev => ({ ...prev, summary: true }));
+      const payload = {
+        client_id: 27,
+        date: new Date().toISOString().split("T")[0],
+      };
+
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/owner/attendance/summaryByCompany`,
+        payload
+      );
+
+      if (response.data && response.data.data) {
+        setAttendanceSummary(response.data.data);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch attendance summary", err);
+      setErrors(prev => [...prev, "Failed to fetch attendance summary"]);
+      showSnackbar("Failed to fetch attendance summary", "error");
+    } finally {
+      setLoading(prev => ({ ...prev, summary: false }));
+    }
+  };
+
+  const fetchLiveAttendance = async () => {
+    try {
+      setLoading(prev => ({ ...prev, liveAttendance: true }));
+      const payload = {
+        client_id: 27,
+        date: new Date().toISOString().split("T")[0],
+      };
+
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/owner/attendance/getLiveAttendance`,
+        payload
+      );
+
+      if (response.data && response.data.data) {
+        setTodayAttendance(response.data.data);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch live attendance", err);
+      setErrors(prev => [...prev, "Failed to fetch live attendance"]);
+      showSnackbar("Failed to fetch live attendance", "error");
+    } finally {
+      setLoading(prev => ({ ...prev, liveAttendance: false }));
+    }
+  };
+
+  const fetchCorrectionRequests = async () => {
+    try {
+      setLoading(prev => ({ ...prev, correctionRequests: true }));
+      const response = await getCorrectedAttendance();
+      
+      if (response && response.data) {
+        setCorrectionRequests(response.data);
+      } else {
+        // Fallback to empty array if no data
+        setCorrectionRequests([]);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch correction requests", err);
+      setErrors(prev => [...prev, "Failed to fetch correction requests"]);
+      showSnackbar("Failed to fetch correction requests", "error");
+      // Set empty array on error
+      setCorrectionRequests([]);
+    } finally {
+      setLoading(prev => ({ ...prev, correctionRequests: false }));
+    }
+  };
+
+  const handleRefreshAll = async () => {
+    setErrors([]);
+    await fetchAllData();
+    showSnackbar("All data refreshed successfully", "success");
+    handleMenuClose();
+  };
+
+  const handleRefreshCurrentTab = () => {
+    switch(activeTab) {
+      case 0:
+        fetchLiveAttendance();
+        showSnackbar("Live attendance refreshed", "success");
+        break;
+      case 1:
+        showSnackbar("Monthly view data refreshed", "success");
+        break;
+      case 2:
+        showSnackbar("Attendance logs refreshed", "success");
+        break;
+      case 3:
+        fetchCorrectionRequests();
+        showSnackbar("Correction requests refreshed", "success");
+        break;
+    }
+  };
+
+  const showSnackbar = (message: string, severity: AlertColor) => {
+    setSnackbar({
+      open: true,
+      message,
+      severity
+    });
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
+
   // Tab configuration
   const tabs = [
     {
       label: "Live Monitor",
       icon: <AccessTime />,
-      component: <LiveAttendanceMonitor 
-        attendanceData={todayAttendance}
-        onRefresh={() => {
-          setTodayAttendance(generateTodayAttendance());
-        }}
-        onEditAttendance={(record) => {
-          console.log("Edit attendance:", record);
-          // Open edit modal
-        }}
-        onViewDetails={(record) => {
-          console.log("View details:", record);
-          // Navigate to details
-        }}
-      />
+      component: (
+        <LiveAttendanceMonitor 
+          attendanceData={todayAttendance}
+          onRefresh={handleRefreshCurrentTab}
+          onEditAttendance={(record) => {
+            setSelectedAttendanceRecord(record);
+            setCorrectionModalOpen(true);
+          }}
+          onViewDetails={(record) => {
+            console.log("View details:", record);
+            // Show info message
+            setSnackbar({
+              open: true,
+              message: `Viewing details for ${record.employeeName}`,
+              severity: 'info'
+            });
+          }}
+        />
+      ),
+      loading: loading.liveAttendance
     },
     {
       label: "Monthly View",
       icon: <CalendarMonth />,
-      component: <EmployeeAttendanceTable />
+      component: <EmployeeAttendanceTable />,
+      loading: false
     },
     {
       label: "Attendance Logs",
       icon: <History />,
-      component: <AttendanceLogs 
-        onExportCSV={(data) => {
-          console.log("Export CSV:", data.length, "records");
-          // Export logic
-        }}
-        onExportPDF={(data) => {
-          console.log("Export PDF:", data.length, "records");
-          // Export logic
-        }}
-        onEditRecord={(record) => {
-          console.log("Edit record:", record);
-          // Open edit modal
-        }}
-        onViewCorrection={(record) => {
-          console.log("View correction:", record);
-          // Open correction details
-        }}
-      />
+      component: (
+        <AttendanceLogs 
+          onExportCSV={(data) => {
+            console.log("Export CSV:", data.length, "records");
+            showSnackbar(`Exported ${data.length} records to CSV`, "success");
+          }}
+          onExportPDF={(data) => {
+            console.log("Export PDF:", data.length, "records");
+            showSnackbar(`Exported ${data.length} records to PDF`, "success");
+          }}
+          onEditRecord={(record) => {
+            console.log("Edit record:", record);
+            setSelectedAttendanceRecord(record);
+            setCorrectionModalOpen(true);
+          }}
+          onViewCorrection={(record) => {
+            console.log("View correction:", record);
+            if (record.correctionRequest) {
+              setSnackbar({
+                open: true,
+                message: `Viewing correction request for ${record.employeeName}`,
+                severity: 'info'
+              });
+            }
+          }}
+        />
+      ),
+      loading: false
     },
     {
       label: "Correction Requests",
       icon: <Edit />,
-      component: <AttendanceRequests 
-        requests={correctionRequests}
-        onApprove={(requestId) => {
-          console.log("Approve request:", requestId);
-          setCorrectionRequests(prev => 
-            prev.map(req => req.id === requestId ? { ...req, status: 'Approved' } : req)
-          );
-        }}
-        onReject={(requestId) => {
-          console.log("Reject request:", requestId);
-          setCorrectionRequests(prev => 
-            prev.map(req => req.id === requestId ? { ...req, status: 'Rejected' } : req)
-          );
-        }}
-        onViewDetails={(request) => {
-          console.log("View request details:", request);
-        }}
-        onExport={(data) => {
-          console.log("Export requests:", data.length, "requests");
-        }}
-      />
+      component: (
+        <AttendanceRequests 
+          onApprove={async (requestId) => {
+            console.log("Approve request:", requestId);
+            // Note: The actual approve/reject logic is handled inside AttendanceRequests component
+            // This callback is just for parent component awareness
+            await fetchCorrectionRequests(); // Refresh after action
+            showSnackbar("Correction request approved", "success");
+          }}
+          onReject={async (requestId) => {
+            console.log("Reject request:", requestId);
+            await fetchCorrectionRequests(); // Refresh after action
+            showSnackbar("Correction request rejected", "success");
+          }}
+          onViewDetails={(request) => {
+            console.log("View request details:", request);
+            setSnackbar({
+              open: true,
+              message: `Viewing correction request details`,
+              severity: 'info'
+            });
+          }}
+          onExport={(data) => {
+            console.log("Export requests:", data.length, "requests");
+            showSnackbar(`Exported ${data.length} correction requests`, "success");
+          }}
+        />
+      ),
+      loading: loading.correctionRequests
     }
   ];
 
@@ -257,7 +323,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
     const late = todayAttendance.filter(r => r.attendanceStatus === 'Late').length;
     const checkedIn = todayAttendance.filter(r => r.checkInTime).length;
     const checkedOut = todayAttendance.filter(r => r.checkOutTime).length;
-    const pendingRequests = correctionRequests.filter(r => r.status === 'Pending').length;
+    const pendingRequests = correctionRequests.filter(r => r.status === 'Need Approval').length;
     
     return {
       totalEmployees,
@@ -267,7 +333,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
       checkedIn,
       checkedOut,
       pendingRequests,
-      attendanceRate: Math.round((present / totalEmployees) * 100)
+      attendanceRate: totalEmployees > 0 ? Math.round((present / totalEmployees) * 100) : 0
     };
   }, [todayAttendance, correctionRequests]);
 
@@ -276,15 +342,19 @@ const EmployeeAttendanceMainArea: React.FC = () => {
     {
       iconClass: "fa-light fa-chart-line",
       title: "Attendance Rate",
-      value: `${attendanceStats.attendanceRate}%`,
+      value: attendanceSummary
+        ? `${attendanceSummary.attendanceRate}%`
+        : "--",
       description: "Today",
       percentageChange: "",
-      isIncrease: attendanceStats.attendanceRate > 85, // Assuming >85% is good
+      isIncrease: (attendanceSummary?.attendanceRate ?? 0) > 85,
     },
     {
       iconClass: "fa-light fa-users",
       title: "Total Employees",
-      value: attendanceStats.totalEmployees.toString(),
+      value: attendanceSummary
+        ? attendanceSummary.totalEmployees.toString()
+        : "--",
       description: "Tracked today",
       percentageChange: "",
       isIncrease: true,
@@ -292,41 +362,49 @@ const EmployeeAttendanceMainArea: React.FC = () => {
     {
       iconClass: "fa-light fa-check-circle",
       title: "Present Today",
-      value: attendanceStats.present.toString(),
-      description: `vs ${attendanceStats.absent} absent`,
+      value: attendanceSummary
+        ? attendanceSummary.present.toString()
+        : "--",
+      description: attendanceSummary
+        ? `vs ${attendanceSummary.absent} absent`
+        : "",
       percentageChange: "",
       isIncrease: true,
     },
     {
       iconClass: "fa-light fa-clock",
       title: "Late Arrivals",
-      value: attendanceStats.late.toString(),
+      value: attendanceSummary
+        ? attendanceSummary.late.toString()
+        : "--",
       description: "Need attention",
       percentageChange: "",
       isIncrease: false,
     },
     {
-      iconClass: "fa-light fa-edit",
-      title: "Pending Requests",
-      value: attendanceStats.pendingRequests.toString(),
-      description: "Require review",
+      iconClass: "fa-light fa-business-time",
+      title: "Total Work Hours",
+      value: attendanceSummary
+        ? `${attendanceSummary.totalWorkedHours} Hrs`
+        : "--",
+      description: "All employees",
       percentageChange: "",
-      isIncrease: attendanceStats.pendingRequests > 0,
+      isIncrease: true,
     },
     {
       iconClass: "fa-light fa-calendar-day",
-      title: "Today&apos;s Date",
-      value: new Date().toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: '2-digit' 
+      title: "Today's Date",
+      value: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "2-digit",
       }),
-      description: new Date().toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric' 
+      description: new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
       }),
       percentageChange: "",
       isIncrease: true,
-    }
+    },
   ];
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -342,30 +420,84 @@ const EmployeeAttendanceMainArea: React.FC = () => {
   };
 
   const handleManualCorrection = () => {
+    setSelectedAttendanceRecord(null);
     setCorrectionModalOpen(true);
     handleMenuClose();
   };
 
   const handleExportAll = () => {
     console.log("Export all attendance data");
+    // Implement export logic
+    setSnackbar({
+      open: true,
+      message: "Export functionality will be implemented soon",
+      severity: 'info'
+    });
     handleMenuClose();
   };
 
-  const handleRefreshAll = () => {
-    setTodayAttendance(generateTodayAttendance());
-    setCorrectionRequests(generateCorrectionRequests());
-    handleMenuClose();
+  const handleSubmitCorrection = async (data: any) => {
+    try {
+      console.log("Submit correction:", data);
+      
+      // Prepare payload for API
+      const payload = {
+        employee_id: parseInt(data.employeeId.replace('EMP', '')),
+        attendance_date: data.date.toISOString().split('T')[0],
+        shift_id: 1, // You might need to get this from the selected record
+        check_in_time: data.checkInTime ? 
+          data.checkInTime.toTimeString().split(' ')[0].substring(0, 5) : 
+          '09:00',
+        check_out_time: data.checkOutTime ? 
+          data.checkOutTime.toTimeString().split(' ')[0].substring(0, 5) : 
+          '18:00',
+        location: "Office",
+        reason: data.reason,
+        source: 'manual'
+      };
+
+      // Call the API
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/attendance/absent-correction`,
+        payload
+      );
+
+      if (response.data && response.data.errorCode === 0) {
+        showSnackbar("Correction request submitted successfully!", "success");
+        
+        // Refresh correction requests
+        await fetchCorrectionRequests();
+        
+        // Close modal
+        setCorrectionModalOpen(false);
+        
+        // Switch to correction requests tab
+        setActiveTab(3);
+      } else {
+        throw new Error(response.data?.errorMessage || "Failed to submit correction");
+      }
+    } catch (error: any) {
+      console.error("Error submitting correction:", error);
+      
+      let errorMessage = "Failed to submit correction request";
+      if (error.response?.data?.errorIdentifier === 'CORRECTION.DUPLICATE') {
+        errorMessage = "A correction request already exists for this employee on this date";
+      } else if (error.response?.data?.errorMessage) {
+        errorMessage = error.response.data.errorMessage;
+      }
+      
+      showSnackbar(errorMessage, "error");
+    }
   };
 
-  const handleSubmitCorrection = (data: any) => {
-    console.log("Submit correction:", data);
+  const handleCorrectionModalClose = () => {
     setCorrectionModalOpen(false);
-    // In real app, would update state or make API call
-    alert("Correction request submitted successfully!");
+    setSelectedAttendanceRecord(null);
   };
 
   return (
     <div className="app__slide-wrapper">
+      {/* Breadcrumb */}
       <div className="breadcrumb__wrapper mb-[25px]">
         <nav>
           <ol className="breadcrumb flex items-center mb-0">
@@ -375,7 +507,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
             <li className="breadcrumb-item">
               <Link href="/owner">Owner</Link>
             </li>
-            <li className="breadcrumb-item active">Salary Structure</li>
+            <li className="breadcrumb-item active">Attendance Management</li>
           </ol>
         </nav>
 
@@ -385,6 +517,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
             startIcon={<Download />}
             onClick={handleExportAll}
             size="small"
+            disabled={loading.summary || loading.liveAttendance}
           >
             Export All
           </Button>
@@ -395,6 +528,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
             onClick={handleManualCorrection}
             size="small"
             className="!text-white"
+            disabled={loading.summary || loading.liveAttendance}
           >
             Manual Correction
           </Button>
@@ -402,6 +536,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
           <IconButton
             size="small"
             onClick={handleMenuOpen}
+            disabled={loading.summary || loading.liveAttendance}
           >
             <MoreVert />
           </IconButton>
@@ -453,25 +588,44 @@ const EmployeeAttendanceMainArea: React.FC = () => {
         </Box>
       </Box>
 
-      {/* Summary Stats Cards using SummarySingleCard */}
-      <div className="grid grid-cols-12 gap-[25px] mb-[25px]">
-        {summaryData.map((item, index) => (
-          <div 
-            key={index} 
-            className={`
-              col-span-12 
-              sm:col-span-6 
-              ${index === 0 || index === 5 ? 'lg:col-span-4' : 'lg:col-span-4'}
-              xl:col-span-3
-              2xl:col-span-2
-            `}
-          >
-            {/* <div className="card card__border border border-solid border-[#ECECEE] dark:border-[#2A2C31] bg-white dark:bg-[#1A1C23] rounded-[10px] p-[25px] transition-all duration-300 hover:shadow-md hover:border-primary/20 dark:hover:border-primary/30"> */}
+      {/* Error Alerts */}
+      {errors.length > 0 && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          onClose={() => setErrors([])}
+        >
+          <Typography variant="body2">
+            {errors[0]}
+            {errors.length > 1 && ` (and ${errors.length - 1} more)`}
+          </Typography>
+        </Alert>
+      )}
+
+      {/* Loading Indicator for Summary Cards */}
+      {loading.summary ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        /* Summary Stats Cards using SummarySingleCard */
+        <div className="grid grid-cols-12 gap-[25px] mb-[25px]">
+          {summaryData.map((item, index) => (
+            <div 
+              key={index} 
+              className={`
+                col-span-12 
+                sm:col-span-6 
+                ${index === 0 || index === 5 ? 'lg:col-span-4' : 'lg:col-span-4'}
+                xl:col-span-3
+                2xl:col-span-2
+              `}
+            >
               <SummarySingleCard {...item} />
-            {/* </div> */}
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Alerts */}
       {attendanceStats.late > 0 && (
@@ -516,8 +670,9 @@ const EmployeeAttendanceMainArea: React.FC = () => {
           {tabs.map((tab, index) => (
             <Tab
               key={index}
-              icon={tab.icon}
+              icon={tab.loading ? <CircularProgress size={20} /> : tab.icon}
               iconPosition="start"
+              disabled={tab.loading}
               label={
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                   <Typography variant="subtitle2">{tab.label}</Typography>
@@ -539,7 +694,12 @@ const EmployeeAttendanceMainArea: React.FC = () => {
                   {index === 3 && (
                     <Typography variant="caption" color="text.secondary">
                       {attendanceStats.pendingRequests > 0 && (
-                        <Chip label={`${attendanceStats.pendingRequests} pending`} size="small" color="warning" />
+                        <Chip 
+                          label={`${attendanceStats.pendingRequests} pending`} 
+                          size="small" 
+                          color="warning" 
+                          sx={{ ml: 1 }}
+                        />
                       )}
                     </Typography>
                   )}
@@ -550,8 +710,14 @@ const EmployeeAttendanceMainArea: React.FC = () => {
         </Tabs>
         
         {/* Tab Content */}
-        <Box sx={{ p: 3 }}>
-          {tabs[activeTab].component}
+        <Box sx={{ p: 3, minHeight: 400 }}>
+          {tabs[activeTab].loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            tabs[activeTab].component
+          )}
         </Box>
       </Paper>
 
@@ -566,6 +732,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
             startIcon={<Edit />}
             onClick={handleManualCorrection}
             size="small"
+            disabled={loading.summary || loading.liveAttendance}
           >
             Manual Attendance Entry
           </Button>
@@ -575,6 +742,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
             startIcon={<Download />}
             onClick={handleExportAll}
             size="small"
+            disabled={loading.summary || loading.liveAttendance}
           >
             Export Monthly Report
           </Button>
@@ -582,7 +750,14 @@ const EmployeeAttendanceMainArea: React.FC = () => {
           <Button
             variant="outlined"
             startIcon={<FilterList />}
-            onClick={() => console.log("Open advanced filters")}
+            onClick={() => {
+              console.log("Open advanced filters");
+              setSnackbar({
+                open: true,
+                message: "Advanced filters will be implemented soon",
+                severity: 'info'
+              });
+            }}
             size="small"
           >
             Advanced Filters
@@ -593,6 +768,7 @@ const EmployeeAttendanceMainArea: React.FC = () => {
             startIcon={<Refresh />}
             onClick={handleRefreshAll}
             size="small"
+            disabled={loading.summary || loading.liveAttendance}
           >
             Refresh All Data
           </Button>
@@ -657,9 +833,18 @@ const EmployeeAttendanceMainArea: React.FC = () => {
       {/* Manual Correction Modal */}
       <ManualCorrectionModal
         open={correctionModalOpen}
-        onClose={() => setCorrectionModalOpen(false)}
+        onClose={handleCorrectionModalClose}
         onSubmit={handleSubmitCorrection}
-        mode="create"
+        record={selectedAttendanceRecord || undefined}
+        mode={selectedAttendanceRecord ? 'edit' : 'create'}
+      />
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        message={snackbar.message}
       />
     </div>
   );

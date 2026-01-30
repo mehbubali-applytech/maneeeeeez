@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useForm, Controller } from "react-hook-form";
@@ -11,197 +11,179 @@ import {
   TextField,
   Radio,
   Checkbox,
-  Chip,
-  Divider,
-  Slider,
+  CircularProgress,
 } from "@mui/material";
+import axios from "axios";
+import debounce from "lodash/debounce";
 
 // Types
 interface ICompany {
-  id: string;
-  companyName: string;
-  registrationNumber?: string;
-  domain: string;
-  logo?: string;
-  employeeLimit?: number;
-  notes?: string;
-  ownerName: string;
-  ownerEmail: string;
-  ownerPhone?: string;
-  modules: {
-    attendance: boolean;
-    leaveManagement: boolean;
-    payroll: boolean;
-    offerLetters: boolean;
-    compliance: boolean;
+  id: number;
+  company_name: string;
+  GSTIN?: string;
+  contact_person: string;
+  contact_email: string;
+  contact_phone?: string;
+  company_details?: {
+    industry_type?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      postal_code?: string;
+    };
+    tax_id?: string;
+    bank_details?: {
+      bank_name?: string;
+      account_number?: string;
+      account_holder_name?: string;
+      ifsc_code?: string;
+      branch_name?: string;
+      account_type?: string;
+    };
+    payment_terms?: string;
+    role_name?: "Super Admin" | "Owner" | "Admin";
+    [key: string]: any;
   };
-  attendanceLevel: "basic" | "advanced";
-  payrollLevel: "basic" | "advanced";
-  subscriptionPlan: "free" | "pro" | "enterprise";
-  timezone: string;
-  currency: string;
-  status: "active" | "inactive" | "pending" | "suspended";
-  createdAt: string;
-  updatedAt: string;
+  contract_start_date: string;
+  contract_end_date?: string;
+  status: "Active" | "Inactive" | "Suspended" | "Pending";
+  created_at: string;
+  updated_at: string;
 }
 
 interface ICompanyForm {
   // Step 1: Company Details
-  companyName: string;
-  registrationNumber: string;
-  domain: string;
+  company_name: string;
+  GSTIN: string;
+  industry_type: string;
+  street: string;
+  city: string;
+  state: string;
+  country: string;
+  postal_code: string;
+  tax_id: string;
+
+  // Step 2: Bank Details
+  bank_name: string;
+  account_number: string;
+  account_holder_name: string;
+  ifsc_code: string;
+  branch_name: string;
+  account_type: string;
+  payment_terms: string;
+  role_name: "Super Admin" | "Owner" | "Admin";
+
+  // Step 3: Contact Details
+  contact_person: string;
+  contact_email: string;
+  contact_phone: string;
+
+  // Step 4: Contract & Status
+  contract_start_date: string;
+  contract_end_date: string;
+  status: "Active" | "Inactive" | "Suspended" | "Pending";
+
+  // Additional fields
   logo: File | null;
   logoPreview: string;
-  employeeLimit: number | "";
   notes: string;
-
-  // Step 2: Owner Details
-  ownerName: string;
-  ownerEmail: string;
-  ownerPhone: string;
-
-  // Step 3: Modules & Plan
-  modules: {
-    attendance: boolean;
-    leaveManagement: boolean;
-    payroll: boolean;
-    offerLetters: boolean;
-    compliance: boolean;
-  };
-  attendanceLevel: "basic" | "advanced";
-  payrollLevel: "basic" | "advanced";
-  subscriptionPlan: "free" | "pro" | "enterprise";
-  timezone: string;
-  currency: string;
-
-  // Step 4: Confirm
   acceptTerms: boolean;
-  sendActivationEmail: boolean;
   finalComments: string;
 }
 
-interface ModuleOption {
-  id: keyof ICompanyForm['modules'];
-  label: string;
-  description: string;
-  note?: string;
-  hasLevel?: boolean;
+// PIN Code API Response Interface
+interface PinCodeResponse {
+  Message: string;
+  Status: string;
+  PostOffice: Array<{
+    Name: string;
+    Description: string;
+    BranchType: string;
+    DeliveryStatus: string;
+    Circle: string;
+    District: string;
+    Division: string;
+    Region: string;
+    Block: string;
+    State: string;
+    Country: string;
+    Pincode: string;
+  }>;
 }
-
-interface PlanOption {
-  id: ICompanyForm['subscriptionPlan'];
-  label: string;
-  description: string;
-  price: string;
-  limits: string[];
-}
-
-interface TimezoneOption {
-  value: string;
-  label: string;
-  offset: string;
-}
-
-interface CurrencyOption {
-  code: string;
-  name: string;
-  symbol: string;
-}
-
-// Mock data
-const timezones: TimezoneOption[] = [
-  { value: "America/New_York", label: "Eastern Time (ET)", offset: "UTC-5" },
-  { value: "America/Chicago", label: "Central Time (CT)", offset: "UTC-6" },
-  { value: "America/Denver", label: "Mountain Time (MT)", offset: "UTC-7" },
-  { value: "America/Los_Angeles", label: "Pacific Time (PT)", offset: "UTC-8" },
-  { value: "Europe/London", label: "GMT/BST", offset: "UTC+0" },
-  { value: "Europe/Paris", label: "Central European Time", offset: "UTC+1" },
-  { value: "Asia/Dubai", label: "Gulf Standard Time", offset: "UTC+4" },
-  { value: "Asia/Kolkata", label: "India Standard Time", offset: "UTC+5:30" },
-  { value: "Asia/Singapore", label: "Singapore Time", offset: "UTC+8" },
-  { value: "Australia/Sydney", label: "Australian Eastern Time", offset: "UTC+10" },
-];
-
-const currencies: CurrencyOption[] = [
-  { code: "USD", name: "US Dollar", symbol: "$" },
-  { code: "EUR", name: "Euro", symbol: "€" },
-  { code: "GBP", name: "British Pound", symbol: "£" },
-  { code: "INR", name: "Indian Rupee", symbol: "₹" },
-  { code: "AUD", name: "Australian Dollar", symbol: "A$" },
-  { code: "CAD", name: "Canadian Dollar", symbol: "C$" },
-  { code: "SGD", name: "Singapore Dollar", symbol: "S$" },
-  { code: "AED", name: "UAE Dirham", symbol: "د.إ" },
-];
-
-const modules: ModuleOption[] = [
-  {
-    id: "attendance",
-    label: "Attendance",
-    description: "Track employee attendance and working hours",
-    hasLevel: true
-  },
-  {
-    id: "leaveManagement",
-    label: "Leave Management",
-    description: "Manage employee leave requests and balances"
-  },
-  {
-    id: "payroll",
-    label: "Payroll",
-    description: "Process salaries, deductions, and tax calculations",
-    hasLevel: true,
-    note: "Payroll requires bank configuration later"
-  },
-  {
-    id: "offerLetters",
-    label: "Offer Letters",
-    description: "Create and send employment offer letters"
-  },
-  {
-    id: "compliance",
-    label: "Compliance",
-    description: "Ensure regulatory compliance and reporting"
-  },
-];
-
-const plans: PlanOption[] = [
-  {
-    id: "free",
-    label: "Free",
-    description: "Basic features for small teams",
-    price: "$0/month",
-    limits: ["Up to 10 employees", "Basic support", "1GB storage"],
-  },
-  {
-    id: "pro",
-    label: "Pro",
-    description: "Advanced features for growing businesses",
-    price: "$29/month",
-    limits: ["Up to 100 employees", "Priority support", "10GB storage", "Custom reports"],
-  },
-  {
-    id: "enterprise",
-    label: "Enterprise",
-    description: "Full suite for large organizations",
-    price: "Custom",
-    limits: ["Unlimited employees", "24/7 support", "100GB storage", "API access", "Custom integrations"],
-  },
-];
 
 interface AddEditCompanyMainAreaProps {
   mode?: "add" | "edit";
   companyData?: ICompany | null;
+  loading?: boolean;
 }
+
+// Mock data for dropdowns
+const countries = [
+  { value: "IN", label: "India" },
+  { value: "US", label: "United States" },
+  { value: "UK", label: "United Kingdom" },
+  { value: "CA", label: "Canada" },
+  { value: "AU", label: "Australia" },
+  { value: "AE", label: "UAE" },
+  { value: "SG", label: "Singapore" },
+];
+
+const industryTypes = [
+  "IT Services",
+  "Manufacturing",
+  "Healthcare",
+  "Finance",
+  "Retail",
+  "Education",
+  "Construction",
+  "Transportation",
+  "Hospitality",
+  "Real Estate",
+  "Telecommunications",
+  "Others"
+];
+
+const paymentTerms = [
+  "Net 30 Days",
+  "Net 45 Days",
+  "Net 60 Days",
+  "Due on Receipt",
+  "50% Advance, 50% on Completion",
+  "Custom"
+];
+
+const accountTypes = [
+  "Savings",
+  "Current",
+  "Salary",
+  "NRI",
+  "Joint"
+];
+
+const accessLevels = [
+  { value: "Super Admin", label: "Super Admin" },
+  { value: "Owner", label: "Owner" },
+  { value: "Admin", label: "Admin" }
+];
 
 const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
   mode = "add",
   companyData = null,
+  loading = false
 }) => {
   const router = useRouter();
   const [activeStep, setActiveStep] = useState(0);
-  const [emailVerified, setEmailVerified] = useState(false);
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [clientId, setClientId] = useState<number | null>(null);
+  const [loadingPinCode, setLoadingPinCode] = useState(false);
+  const [ifscLoading, setIfscLoading] = useState(false);
+  const [bankDetails, setBankDetails] = useState<{
+    bank_name?: string;
+    branch_name?: string;
+  } | null>(null);
 
   const {
     register,
@@ -215,85 +197,180 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
     getValues,
   } = useForm<ICompanyForm>({
     defaultValues: {
-      companyName: "",
-      registrationNumber: "",
-      domain: "",
+      company_name: "",
+      GSTIN: "",
+      industry_type: "IT Services",
+      street: "",
+      city: "",
+      state: "",
+      country: "IN",
+      postal_code: "",
+      tax_id: "",
+      bank_name: "",
+      account_number: "",
+      account_holder_name: "",
+      ifsc_code: "",
+      branch_name: "",
+      account_type: "Current",
+      payment_terms: "Net 30 Days",
+      role_name: "Owner",
+      contact_person: "",
+      contact_email: "",
+      contact_phone: "",
+      contract_start_date: new Date().toISOString().split('T')[0],
+      contract_end_date: "",
+      status: "Active",
       logo: null,
       logoPreview: "",
-      employeeLimit: "",
       notes: "",
-      ownerName: "",
-      ownerEmail: "",
-      ownerPhone: "",
-      modules: {
-        attendance: true,
-        leaveManagement: true,
-        payroll: false,
-        offerLetters: false,
-        compliance: false,
-      },
-      attendanceLevel: "basic",
-      payrollLevel: "basic",
-      subscriptionPlan: "pro",
-      timezone: "Asia/Kolkata",
-      currency: "USD",
       acceptTerms: false,
-      sendActivationEmail: true,
       finalComments: "",
     },
     mode: "onChange",
   });
 
   const steps = [
-    { label: "Company Details", description: "Enter basic company information" },
-    { label: "Owner Details", description: "Provide owner/admin information" },
-    { label: "Modules & Plan", description: "Select modules and subscription plan" },
+    { label: "Company Details", description: "Enter company information and address" },
+    { label: "Bank Details", description: "Provide banking information" },
+    { label: "Contact Details", description: "Add contact person information" },
+    { label: "Contract & Status", description: "Set contract dates and status" },
     { label: "Confirm & Submit", description: "Review and complete" },
   ];
 
-  const companyName = watch("companyName");
-  const modulesSelected = watch("modules");
-  const selectedModules = Object.values(modulesSelected).filter(Boolean).length;
-  const subscriptionPlan = watch("subscriptionPlan");
+  // Watch postal code for auto-fill
+  const postalCode = watch("postal_code");
+  const ifscCode = watch("ifsc_code");
+  const country = watch("country");
 
-  // Auto-suggest domain for add mode
-  useEffect(() => {
-    if (mode === "add" && companyName && !watch("domain")) {
-      const suggestedDomain = companyName
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "");
-      setValue("domain", `${suggestedDomain}.myhrms.com`);
+// PIN Code Lookup API
+const fetchAddressByPinCode = useCallback(
+  debounce(async (pincode: string) => {
+    if (!pincode || pincode.length !== 6 || country !== "IN") return;
+    
+    setLoadingPinCode(true);
+    try {
+      const response = await axios.get<PinCodeResponse>(
+        `https://api.postalpincode.in/pincode/${pincode}`
+      );
+      
+      // Check if response is an array and has data
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        const data = response.data[0];
+        
+        if (data.Status === "Success" && data.PostOffice?.length > 0) {
+          const postOffice = data.PostOffice[0];
+          
+          setValue("city", postOffice.District || postOffice.Name, { shouldValidate: true });
+          setValue("state", postOffice.State, { shouldValidate: true });
+          setValue("country", "IN", { shouldValidate: true });
+          
+          toast.success("Address auto-filled from PIN code!");
+        } else {
+          toast.error("Invalid PIN code or no data found");
+        }
+      } else {
+        toast.error("Invalid response from PIN code API");
+      }
+    } catch (error) {
+      console.error("Error fetching address:", error);
+      toast.error("Failed to fetch address details");
+    } finally {
+      setLoadingPinCode(false);
     }
-  }, [companyName, setValue, watch, mode]);
+  }, 1000),
+  [setValue, country]
+);
+
+  // IFSC Code Lookup API
+  const fetchBankDetailsByIFSC = useCallback(
+    debounce(async (ifsc: string) => {
+      if (!ifsc || ifsc.length !== 11) return;
+
+      setIfscLoading(true);
+      try {
+        const response = await axios.get(
+          `https://ifsc.razorpay.com/${ifsc}`
+        );
+
+        if (response.data) {
+          setBankDetails({
+            bank_name: response.data.BANK,
+            branch_name: response.data.BRANCH
+          });
+
+          setValue("bank_name", response.data.BANK, { shouldValidate: true });
+          setValue("branch_name", response.data.BRANCH, { shouldValidate: true });
+
+          toast.success("Bank details auto-filled from IFSC!");
+        }
+      } catch (error) {
+        console.error("Error fetching bank details:", error);
+        toast.error("Invalid IFSC code");
+      } finally {
+        setIfscLoading(false);
+      }
+    }, 1000),
+    [setValue]
+  );
+
+  // Effect for PIN code lookup
+  useEffect(() => {
+    if (postalCode && postalCode.length === 6 && country === "IN") {
+      fetchAddressByPinCode(postalCode);
+    }
+  }, [postalCode, country, fetchAddressByPinCode]);
+
+  // Effect for IFSC code lookup
+  useEffect(() => {
+    if (ifscCode && ifscCode.length === 11) {
+      fetchBankDetailsByIFSC(ifscCode);
+    }
+  }, [ifscCode, fetchBankDetailsByIFSC]);
 
   // Load company data in edit mode
   useEffect(() => {
     if (mode === "edit" && companyData) {
-      // Transform company data to form data
       const formData: Partial<ICompanyForm> = {
-        companyName: companyData.companyName,
-        registrationNumber: companyData.registrationNumber || "",
-        domain: companyData.domain,
-        logoPreview: companyData.logo || "",
-        employeeLimit: companyData.employeeLimit || "",
-        notes: companyData.notes || "",
-        ownerName: companyData.ownerName,
-        ownerEmail: companyData.ownerEmail,
-        ownerPhone: companyData.ownerPhone || "",
-        modules: companyData.modules,
-        attendanceLevel: companyData.attendanceLevel,
-        payrollLevel: companyData.payrollLevel,
-        subscriptionPlan: companyData.subscriptionPlan,
-        timezone: companyData.timezone,
-        currency: companyData.currency,
-        acceptTerms: true, // Assume accepted for edit
-        sendActivationEmail: false, // Don't send email on edit
+        company_name: companyData.company_name,
+        GSTIN: companyData.GSTIN || "",
+        contact_person: companyData.contact_person,
+        contact_email: companyData.contact_email,
+        contact_phone: companyData.contact_phone || "",
+        contract_start_date: companyData.contract_start_date.split('T')[0],
+        contract_end_date: companyData.contract_end_date ? companyData.contract_end_date.split('T')[0] : "",
+        status: companyData.status,
+        notes: "",
+        acceptTerms: true,
         finalComments: "",
       };
 
-      // Set form values
+      // Extract company_details fields
+      if (companyData.company_details) {
+        formData.industry_type = companyData.company_details.industry_type || "";
+        formData.tax_id = companyData.company_details.tax_id || "";
+        formData.payment_terms = companyData.company_details.payment_terms || "Net 30 Days";
+        formData.role_name = companyData.company_details.role_name || "Owner";
+
+        // Extract bank details
+        if (companyData.company_details.bank_details) {
+          formData.bank_name = companyData.company_details.bank_details.bank_name || "";
+          formData.account_number = companyData.company_details.bank_details.account_number || "";
+          formData.account_holder_name = companyData.company_details.bank_details.account_holder_name || "";
+          formData.ifsc_code = companyData.company_details.bank_details.ifsc_code || "";
+          formData.branch_name = companyData.company_details.bank_details.branch_name || "";
+          formData.account_type = companyData.company_details.bank_details.account_type || "Current";
+        }
+
+        // Extract address
+        if (companyData.company_details.address) {
+          formData.street = companyData.company_details.address.street || "";
+          formData.city = companyData.company_details.address.city || "";
+          formData.state = companyData.company_details.address.state || "";
+          formData.country = companyData.company_details.address.country || "IN";
+          formData.postal_code = companyData.company_details.address.postal_code || "";
+        }
+      }
+
       Object.entries(formData).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           const formKey = key as Extract<keyof ICompanyForm, string>;
@@ -301,8 +378,7 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
         }
       });
 
-      // Mark email as verified for existing company
-      setEmailVerified(true);
+      setClientId(companyData.id);
     }
   }, [mode, companyData, setValue]);
 
@@ -329,113 +405,152 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
     }
   };
 
-  // Verify email uniqueness (only for add mode)
-  const verifyEmail = async () => {
-    const email = watch("ownerEmail");
-    if (!email || errors.ownerEmail) {
-      toast.error("Please enter a valid email address first");
-      return;
-    }
 
-    setIsVerifyingEmail(true);
-    // Mock API call
-    setTimeout(() => {
-      setIsVerifyingEmail(false);
-      const isAvailable = Math.random() > 0.3; // 70% chance available
-      if (isAvailable) {
-        setEmailVerified(true);
-        toast.success("Email is available!");
-      } else {
-        toast.error("Email already in use");
-      }
-    }, 1000);
-  };
 
+  // Handle step navigation with validation
   const handleNextStep = async () => {
     const currentStepFields = getStepFields(activeStep);
     const isValid = await trigger(currentStepFields as any);
 
-    if (isValid) {
-      if (activeStep === 1 && mode === "add" && !emailVerified) {
-        toast.warning("Please verify the email address before proceeding");
-        return;
-      }
-      if (activeStep === 2 && selectedModules === 0) {
-        toast.warning("Please select at least one module");
-        return;
-      }
-      setActiveStep(activeStep + 1);
-    } else {
+    if (!isValid) {
       toast.error("Please fill in all required fields correctly");
+      return;
     }
+
+    try {
+      setIsSubmitting(true);
+      const formValues = getValues();
+
+      switch (activeStep) {
+        case 0: // Company Details
+          const companyData = {
+            company_name: formValues.company_name,
+            GSTIN: formValues.GSTIN,
+            company_details: {
+              industry_type: formValues.industry_type,
+              address: {
+                street: formValues.street,
+                city: formValues.city,
+                state: formValues.state,
+                country: formValues.country,
+                postal_code: formValues.postal_code
+              },
+              tax_id: formValues.tax_id
+            }
+          };
+
+          const resData1 = await axios.post(
+            `${process.env.NEXT_PUBLIC_API_URL}/super-admin/company/step1`,
+            companyData
+          );
+
+          if (resData1.data) {
+            setClientId(resData1.data.data.client_id);
+            localStorage.setItem("idTocreateCompany",resData1.data.data.client_id);
+            toast.success("Company details saved successfully!");
+          }
+          break;
+
+        case 1: // Bank Details
+          const bankData = {
+            companyId: clientId,
+            company_details: {
+              bank_details: {
+                bank_name: formValues.bank_name,
+                account_number: formValues.account_number,
+                account_holder_name: formValues.account_holder_name,
+                ifsc_code: formValues.ifsc_code,
+                branch_name: formValues.branch_name,
+                account_type: formValues.account_type
+              },
+              payment_terms: formValues.payment_terms,
+              role_name: formValues.role_name
+            }
+          };
+
+          const resData2 = await axios.post(
+            `${process.env.NEXT_PUBLIC_API_URL}/super-admin/company/step2`,
+            bankData
+          );
+
+          if (resData2.data.success) {
+            toast.success("Bank details saved successfully!");
+          }
+          break;
+
+        case 2: // Contact Details
+           const contactData = {
+    companyId: clientId,
+    contact_person: formValues.contact_person,
+    contact_email: formValues.contact_email,
+    contact_phone: formValues.contact_phone
   };
 
-  const handlePreviousStep = () => {
-    setActiveStep(activeStep - 1);
+  const resData3 = await axios.post(
+    `${process.env.NEXT_PUBLIC_API_URL}/super-admin/company/step3`,
+    contactData
+  );
+
+  if (resData3.data.success) {
+    toast.success("Contact details saved successfully!");
+  }
+  break;
+
+        case 3: // Contract & Status
+          const contractData = {
+            companyId: clientId,
+            contract_start_date: formValues.contract_start_date,
+            contract_end_date: formValues.contract_end_date || null,
+            status: formValues.status
+          };
+
+          const resData4 = await axios.post(
+            `${process.env.NEXT_PUBLIC_API_URL}/super-admin/company/step4`,
+            contractData
+          );
+
+          if (resData4.data.success) {
+            toast.success("Contract details saved successfully!");
+          }
+          break;
+
+        default:
+          break;
+      }
+
+      setActiveStep(activeStep + 1);
+
+    } catch (error: any) {
+      console.error(`Error saving step ${activeStep + 1}:`, error);
+
+      if (error.response) {
+        const errorData = error.response.data;
+        toast.error(errorData.message || `Failed to save step ${activeStep + 1}`);
+      } else {
+        toast.error(`Failed to save step ${activeStep + 1}. Please try again.`);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getStepFields = (step: number): (keyof ICompanyForm)[] => {
     switch (step) {
       case 0:
-        return ["companyName"];
+        return ["company_name", "industry_type", "country", "city", "postal_code"];
       case 1:
-        return ["ownerName", "ownerEmail"];
+        return ["bank_name", "account_number", "account_holder_name", "ifsc_code"];
       case 2:
-        return ["subscriptionPlan", "timezone", "currency"];
+        return ["contact_person", "contact_email"];
+      case 3:
+        return ["contract_start_date", "status"];
       default:
         return [];
     }
   };
 
-  const onSubmit = async (data: ICompanyForm) => {
-    if (!data.acceptTerms) {
-      toast.error("Please accept the Terms & Conditions");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      // Create FormData for file upload
-      const formData = new FormData();
-      Object.entries(data).forEach(([key, value]) => {
-        if (key === "logo" && value instanceof File) {
-          formData.append(key, value);
-        } else if (key === "modules") {
-          formData.append(key, JSON.stringify(value));
-        } else {
-          formData.append(key, String(value));
-        }
-      });
-
-      // Add mode-specific data
-      if (mode === "edit" && companyData) {
-        formData.append("id", companyData.id);
-        formData.append("status", companyData.status);
-      }
-
-      // Mock API call
-      console.log(`${mode === "add" ? "Creating" : "Updating"} company:`, Object.fromEntries(formData));
-
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      toast.success(mode === "add" ? "Company created successfully!" : "Company updated successfully!");
-
-      if (mode === "add" && data.sendActivationEmail) {
-        toast.success("Activation email sent to owner");
-      }
-
-      // Navigate to companies list
-      setTimeout(() => {
-        router.push("/super-admin/companies");
-      }, 1000);
-
-    } catch (error) {
-      console.error(`Error ${mode === "add" ? "creating" : "updating"} company:`, error);
-      toast.error(mode === "add" ? "Failed to create company" : "Failed to update company");
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handlePreviousStep = () => {
+    setActiveStep(activeStep - 1);
   };
 
   const handleCancel = () => {
@@ -445,6 +560,85 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
       }
     } else {
       router.push("/super-admin/companies");
+    }
+  };
+
+  const onSubmit = async (data: ICompanyForm) => {
+    if (mode === "add" && !data.acceptTerms) {
+      toast.error("Please accept the Terms & Conditions");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // Prepare company details object
+      const companyDetails = {
+        industry_type: data.industry_type,
+        address: {
+          street: data.street,
+          city: data.city,
+          state: data.state,
+          country: data.country,
+          postal_code: data.postal_code
+        },
+        tax_id: data.tax_id,
+        bank_details: {
+          bank_name: data.bank_name,
+          account_number: data.account_number,
+          account_holder_name: data.account_holder_name,
+          ifsc_code: data.ifsc_code,
+          branch_name: data.branch_name,
+          account_type: data.account_type
+        },
+        payment_terms: data.payment_terms,
+        role_name: data.role_name
+      };
+
+      const finalData = {
+        client_id:clientId,
+        company_name: data.company_name,
+        GSTIN: data.GSTIN || null,
+        contact_person: data.contact_person,
+        contact_email: data.contact_email,
+        contact_phone: data.contact_phone || null,
+        company_details: JSON.stringify(companyDetails),
+        contract_start_date: data.contract_start_date,
+        contract_end_date: data.contract_end_date || null,
+        status: data.status
+      };
+
+      let response;
+      if (mode === "add") {
+        response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/super-admin/company/create`, finalData);
+      } else {
+        response = await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/api/company/${clientId}`, finalData);
+      }
+
+      if (response.data.data) {
+        localStorage.removeItem('idTocreateCompany')
+        toast.success(
+          mode === "add"
+            ? "Company created successfully!"
+            : "Company updated successfully!"
+        );
+
+        setTimeout(() => {
+          router.push("/super-admin/companies");
+        }, 1500);
+      }
+
+    } catch (error: any) {
+      console.error(`Error ${mode === "add" ? "creating" : "updating"} company:`, error);
+
+      if (error.response) {
+        const errorData = error.response.data;
+        toast.error(errorData.message || `Failed to ${mode === "add" ? "create" : "update"} company`);
+      } else {
+        toast.error(`Failed to ${mode === "add" ? "create" : "update"} company. Please try again.`);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -460,151 +654,201 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
               </label>
               <input
                 type="text"
-                maxLength={150}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
-                {...register("companyName", {
+                {...register("company_name", {
                   required: "Company name is required",
                   maxLength: {
-                    value: 150,
-                    message: "Maximum 150 characters allowed",
+                    value: 255,
+                    message: "Maximum 255 characters allowed",
                   },
                 })}
-                disabled={mode === "edit"} // Company name cannot be changed after creation
               />
-              {errors.companyName && (
-                <p className="text-red-500 text-sm mt-1">{errors.companyName.message}</p>
+              {errors.company_name && (
+                <p className="text-red-500 text-sm mt-1">{errors.company_name.message}</p>
               )}
-              {mode === "edit" && (
-                <p className="text-gray-500 text-sm mt-1">Company name cannot be changed after creation</p>
-              )}
-              <div className="flex justify-between mt-1">
-                <span className="text-sm text-gray-500">
-                  Max 150 characters
-                </span>
-                <span className="text-sm text-gray-500">
-                  {companyName?.length || 0}/150
-                </span>
-              </div>
             </div>
 
-            {/* Registration Number */}
+            {/* GSTIN */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Incorporation / Registration Number
+                GSTIN
               </label>
               <input
                 type="text"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
-                {...register("registrationNumber")}
-              />
-            </div>
-
-            {/* Domain */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Domain / Sub-Domain
-              </label>
-              <input
-                type="text"
-                className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors ${
-                  mode === "edit" ? "bg-gray-100" : ""
-                }`}
-                {...register("domain", {
+                {...register("GSTIN", {
                   pattern: {
-                    value: /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myhrms\.com$/,
-                    message: "Must be in format: yourcompany.myhrms.com",
+                    value: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+                    message: "Invalid GSTIN format",
                   },
                 })}
-                disabled={mode === "edit"} // Domain cannot be changed after creation
+                placeholder="e.g., 27AABCU9603R1Z2"
               />
-              {errors.domain && (
-                <p className="text-red-500 text-sm mt-1">{errors.domain.message}</p>
-              )}
-              {mode === "edit" && (
-                <p className="text-gray-500 text-sm mt-1">Domain cannot be changed after creation</p>
-              )}
+              {errors.GSTIN && (
+                <p className="text-red-500 text-sm mt-1">{errors.GSTIN.message}</p>)}
               <p className="text-sm text-gray-500 mt-1">
-                e.g. acme.myhrms.com
+                Format: 27AABCU9603R1Z2 (15 characters)
               </p>
             </div>
 
-            {/* Logo Upload */}
+            {/* Industry Type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Company Logo
+                Industry Type <span className="text-red-500">*</span>
               </label>
-              <div className="flex items-center space-x-4">
-                <div className="w-20 h-20 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center overflow-hidden">
-                  {watch("logoPreview") ? (
-                    <div className="relative w-full h-full">
-                      <Image
-                        src={watch("logoPreview")}
-                        alt="Logo preview"
-                        fill
-                        className="object-contain p-2"
-                        unoptimized={true} // For data URLs
+              <Controller
+                name="industry_type"
+                control={control}
+                render={({ field }) => (
+                  <Autocomplete
+                    value={field.value}
+                    options={industryTypes}
+                    onChange={(_, newValue) => field.onChange(newValue || "")}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        size="small"
+                        placeholder="Select industry type"
                       />
-                    </div>
-                  ) : (
-                    <div className="text-gray-400">
-                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+                    )}
+                  />
+                )}
+              />
+              {errors.industry_type && (
+                <p className="text-red-500 text-sm mt-1">{errors.industry_type.message}</p>
+              )}
+            </div>
+
+            {/* Tax ID */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tax ID / PAN Number
+              </label>
+              <input
+                type="text"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                {...register("tax_id", {
+                  pattern: {
+                    value: /[A-Z]{5}[0-9]{4}[A-Z]{1}/,
+                    message: "Invalid PAN format (e.g., ABCDE1234F)",
+                  },
+                })}
+              />
+              {errors.tax_id && (
+                <p className="text-red-500 text-sm mt-1">{errors.tax_id.message}</p>
+              )}
+            </div>
+
+            {/* Address Fields */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-700">Address Details</h3>
+
+              {/* Street Address */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Street Address
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                  {...register("street")}
+                />
+              </div>
+
+              {/* Postal Code with Auto-fill */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Postal / PIN Code <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                    {...register("postal_code", {
+                      required: "Postal code is required",
+                      pattern: {
+                        value: /^[0-9]{6}$/,
+                        message: "6-digit PIN code required",
+                      },
+                    })}
+                    placeholder="Enter 6-digit PIN code"
+                  />
+                  {loadingPinCode && (
+                    <div className="absolute right-3 top-3">
+                      <CircularProgress size={20} />
                     </div>
                   )}
                 </div>
-                <div>
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      accept=".png,.jpg,.jpeg,.svg"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                    <div className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
-                      {watch("logoPreview") ? "Change Logo" : "Upload Logo"}
-                    </div>
-                  </label>
+                {errors.postal_code && (
+                  <p className="text-red-500 text-sm mt-1">{errors.postal_code.message}</p>
+                )}
+                {country === "IN" && (
                   <p className="text-sm text-gray-500 mt-1">
-                    PNG, JPG, SVG up to 5MB
+                    Enter 6-digit PIN code to auto-fill city and state
                   </p>
+                )}
+              </div>
+
+              {/* City & State (auto-filled from PIN) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    City <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                    {...register("city", { required: "City is required" })}
+                  />
+                  {errors.city && (
+                    <p className="text-red-500 text-sm mt-1">{errors.city.message}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    State <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                    {...register("state", { required: "State is required" })}
+                  />
+                  {errors.state && (
+                    <p className="text-red-500 text-sm mt-1">{errors.state.message}</p>
+                  )}
                 </div>
               </div>
-            </div>
 
-            {/* Employee Limit */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Employee Limit
-              </label>
-              <input
-                type="number"
-                min="0"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
-                {...register("employeeLimit", {
-                  min: { value: 0, message: "Must be positive number" },
-                  valueAsNumber: true,
-                })}
-              />
-              {errors.employeeLimit && (
-                <p className="text-red-500 text-sm mt-1">{errors.employeeLimit.message}</p>
-              )}
-              <p className="text-sm text-gray-500 mt-1">
-                Leave blank for unlimited (based on plan)
-              </p>
-            </div>
-
-            {/* Additional Notes */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Additional Notes
-              </label>
-              <textarea
-                rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
-                {...register("notes")}
-                placeholder="For internal remarks or setup notes"
-              />
+              {/* Country */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Country <span className="text-red-500">*</span>
+                </label>
+                <Controller
+                  name="country"
+                  control={control}
+                  render={({ field }) => (
+                    <Autocomplete
+                      value={countries.find(c => c.value === field.value) || countries[0]}
+                      options={countries}
+                      getOptionLabel={(option) => option.label}
+                      onChange={(_, newValue) => field.onChange(newValue?.value || "")}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          size="small"
+                          placeholder="Select country"
+                        />
+                      )}
+                    />
+                  )}
+                />
+                {errors.country && (
+                  <p className="text-red-500 text-sm mt-1">{errors.country.message}</p>
+                )}
+              </div>
             </div>
           </div>
         );
@@ -615,276 +859,372 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
             <div className="flex items-start space-x-4 p-4 bg-blue-50 rounded-lg">
               <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
               </div>
               <div>
                 <p className="text-sm text-blue-700">
-                  {mode === "add" 
-                    ? "This person will be assigned as Company Admin after activation."
-                    : "Company admin details. Email cannot be changed."
-                  }
+                  Bank details are required for payment processing and payroll.
                 </p>
               </div>
             </div>
 
-            {/* Owner Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Admin Full Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
-                {...register("ownerName", {
-                  required: "Admin name is required",
-                })}
-              />
-              {errors.ownerName && (
-                <p className="text-red-500 text-sm mt-1">{errors.ownerName.message}</p>
-              )}
-            </div>
-
-            {/* Owner Email */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Admin Email Address <span className="text-red-500">*</span>
-              </label>
-              <div className="flex space-x-2">
-                <input
-                  type="email"
-                  className={`flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors ${
-                    mode === "edit" ? "bg-gray-100" : ""
-                  }`}
-                  {...register("ownerEmail", {
-                    required: "Email is required",
-                    pattern: {
-                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                      message: "Invalid email address",
-                    },
-                    onChange: () => mode === "add" && setEmailVerified(false),
-                  })}
-                  disabled={mode === "edit"} // Email cannot be changed after creation
-                />
-                {mode === "add" && (
-                  <button
-                    type="button"
-                    onClick={verifyEmail}
-                    disabled={isVerifyingEmail || !!errors.ownerEmail || !watch("ownerEmail")}
-                    className="px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isVerifyingEmail ? "Verifying..." : emailVerified ? "✓ Verified" : "Verify"}
-                  </button>
-                )}
-              </div>
-              {errors.ownerEmail && (
-                <p className="text-red-500 text-sm mt-1">{errors.ownerEmail.message}</p>
-              )}
-              {mode === "add" && emailVerified && (
-                <p className="text-green-600 text-sm mt-1">✓ Email is available</p>
-              )}
-              {mode === "edit" && (
-                <p className="text-gray-500 text-sm mt-1">Email cannot be changed after creation</p>
-              )}
-            </div>
-
-            {/* Owner Phone */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Admin Phone Number
-              </label>
-              <input
-                type="tel"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
-                {...register("ownerPhone")}
-                placeholder="+91 99999 99999"
-              />
-            </div>
-          </div>
-        );
-
-      case 2:
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Left: Modules */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Select Modules</h3>
-              <div className="space-y-4">
-                {modules.map((moduleItem) => (
-                  <div key={moduleItem.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start space-x-3">
-                      <Controller
-                        name={`modules.${moduleItem.id}`}
-                        control={control}
-                        render={({ field }) => (
-                          <Checkbox
-                            checked={field.value}
-                            onChange={field.onChange}
-                            className="mt-1"
-                          />
-                        )}
-                      />
-                      <div className="flex-1">
-                        <label className="block font-medium text-gray-700">
-                          {moduleItem.label}
-                        </label>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {moduleItem.description}
-                        </p>
-
-                        {moduleItem.note && (
-                          <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-700">
-                            🛈 {moduleItem.note}
-                          </div>
-                        )}
-
-                        {moduleItem.hasLevel && watch(`modules.${moduleItem.id}`) && (
-                          <div className="mt-3">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Level
-                            </label>
-                            <Controller
-                              name={
-                                moduleItem.id === "attendance"
-                                  ? "attendanceLevel"
-                                  : "payrollLevel"
-                              }
-                              control={control}
-                              render={({ field }) => (
-                                <select
-                                  {...field}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                >
-                                  <option value="basic">Basic</option>
-                                  <option value="advanced">Advanced</option>
-                                </select>
-                              )}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-              </div>
-              <div className="mt-4 text-sm text-gray-600">
-                Selected: {selectedModules} module{selectedModules !== 1 ? "s" : ""}
-                {selectedModules === 0 && (
-                  <span className="text-red-500 ml-2">(At least one required)</span>
-                )}
-              </div>
-            </div>
-
-            {/* Right: Plan & Defaults */}
-            <div className="space-y-6">
-              {/* Subscription Plan */}
+            {/* Bank Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Bank Name */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Subscription Plan</h3>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Bank Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                  {...register("bank_name", {
+                    required: "Bank name is required",
+                  })}
+                />
+                {errors.bank_name && (
+                  <p className="text-red-500 text-sm mt-1">{errors.bank_name.message}</p>
+                )}
+              </div>
+
+              {/* Account Number */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Account Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                  {...register("account_number", {
+                    required: "Account number is required",
+                    pattern: {
+                      value: /^[0-9]{9,18}$/,
+                      message: "Invalid account number (9-18 digits)",
+                    },
+                  })}
+                />
+                {errors.account_number && (
+                  <p className="text-red-500 text-sm mt-1">{errors.account_number.message}</p>
+                )}
+              </div>
+
+              {/* Account Holder Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Account Holder Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                  {...register("account_holder_name", {
+                    required: "Account holder name is required",
+                  })}
+                />
+                {errors.account_holder_name && (
+                  <p className="text-red-500 text-sm mt-1">{errors.account_holder_name.message}</p>
+                )}
+              </div>
+
+              {/* IFSC Code with Auto-fill */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  IFSC Code <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    maxLength={11}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                    {...register("ifsc_code", {
+                      required: "IFSC code is required",
+                      pattern: {
+                        value: /^[A-Z]{4}0[A-Z0-9]{6}$/,
+                        message: "Invalid IFSC format (e.g., SBIN0001234)",
+                      },
+                    })}
+                    placeholder="e.g., SBIN0001234"
+                  />
+                  {ifscLoading && (
+                    <div className="absolute right-3 top-3">
+                      <CircularProgress size={20} />
+                    </div>
+                  )}
+                </div>
+                {errors.ifsc_code && (
+                  <p className="text-red-500 text-sm mt-1">{errors.ifsc_code.message}</p>
+                )}
+                <p className="text-sm text-gray-500 mt-1">
+                  11-character IFSC code (e.g., SBIN0001234)
+                </p>
+              </div>
+
+              {/* Branch Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Branch Name
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                  {...register("branch_name")}
+                />
+              </div>
+
+              {/* Account Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Account Type
+                </label>
                 <Controller
-                  name="subscriptionPlan"
+                  name="account_type"
                   control={control}
                   render={({ field }) => (
-                    <div className="space-y-3">
-                      {plans.map((plan) => (
-                        <div
-                          key={plan.id}
-                          className={`border rounded-lg p-4 cursor-pointer transition-all ${field.value === plan.id
-                              ? "border-primary bg-primary/5"
-                              : "border-gray-200 hover:border-gray-300"
-                            }`}
-                          onClick={() => field.onChange(plan.id)}
-                        >
-                          <div className="flex items-start space-x-3">
-                            <Radio
-                              checked={field.value === plan.id}
-                              onChange={() => field.onChange(plan.id)}
-                            />
-                            <div className="flex-1">
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <h4 className="font-medium text-gray-800">{plan.label}</h4>
-                                  <p className="text-sm text-gray-600">{plan.description}</p>
-                                </div>
-                                <span className="text-lg font-semibold text-primary">
-                                  {plan.price}
-                                </span>
-                              </div>
-                              <ul className="mt-3 space-y-1">
-                                {plan.limits.map((limit, index) => (
-                                  <li key={index} className="text-sm text-gray-600 flex items-center">
-                                    <svg className="w-4 h-4 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                    </svg>
-                                    {limit}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
+                    <Autocomplete
+                      value={field.value}
+                      options={accountTypes}
+                      onChange={(_, newValue) => field.onChange(newValue || "")}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          size="small"
+                          placeholder="Select account type"
+                        />
+                      )}
+                    />
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Payment Terms */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Payment Terms
+              </label>
+              <Controller
+                name="payment_terms"
+                control={control}
+                render={({ field }) => (
+                  <Autocomplete
+                    value={field.value}
+                    options={paymentTerms}
+                    onChange={(_, newValue) => field.onChange(newValue || "")}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        size="small"
+                        placeholder="Select payment terms"
+                      />
+                    )}
+                  />
+                )}
+              />
+            </div>
+
+            {/* Access Level */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Access Level <span className="text-red-500">*</span>
+              </label>
+              <Controller
+                name="role_name"
+                control={control}
+                render={({ field }) => (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {accessLevels.map((level) => (
+                      <div
+                        key={level.value}
+                        className={`border rounded-lg p-4 cursor-pointer transition-all ${field.value === level.value
+                            ? "border-primary bg-primary/5"
+                            : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        onClick={() => field.onChange(level.value)}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Radio
+                            checked={field.value === level.value}
+                            onChange={() => field.onChange(level.value)}
+                          />
+                          <div>
+                            <h4 className="font-medium text-gray-800">{level.label}</h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {level.value === "Super Admin" && "Full system access with all permissions"}
+                              {level.value === "Owner" && "Complete company access and management"}
+                              {level.value === "Admin" && "Limited access for day-to-day operations"}
+                            </p>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                />
-              </div>
-
-              {/* Default Timezone */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Default Timezone <span className="text-red-500">*</span>
-                </label>
-                <Controller
-                  name="timezone"
-                  control={control}
-                  render={({ field }) => (
-                    <Autocomplete
-                      value={timezones.find(tz => tz.value === field.value) || timezones[0]}
-                      options={timezones}
-                      getOptionLabel={(option) => `${option.label} (${option.offset})`}
-                      onChange={(_, newValue) => field.onChange(newValue?.value || "")}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          size="small"
-                          placeholder="Select timezone"
-                        />
-                      )}
-                    />
-                  )}
-                />
-              </div>
-
-              {/* Default Currency */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Default Currency <span className="text-red-500">*</span>
-                </label>
-                <Controller
-                  name="currency"
-                  control={control}
-                  render={({ field }) => (
-                    <Autocomplete
-                      value={currencies.find(c => c.code === field.value) || currencies[0]}
-                      options={currencies}
-                      getOptionLabel={(option) => `${option.code} - ${option.name} (${option.symbol})`}
-                      onChange={(_, newValue) => field.onChange(newValue?.code || "")}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          size="small"
-                          placeholder="Select currency"
-                        />
-                      )}
-                    />
-                  )}
-                />
-              </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              />
             </div>
           </div>
         );
 
+case 2:
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start space-x-4 p-4 bg-blue-50 rounded-lg">
+        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+          <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        </div>
+        <div>
+          <p className="text-sm text-blue-700">
+            {mode === "add"
+              ? "This person will be the primary contact for the company."
+              : "Contact person details."
+            }
+          </p>
+        </div>
+      </div>
+
+      {/* Contact Person */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Contact Person <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+          {...register("contact_person", {
+            required: "Contact person is required",
+          })}
+        />
+        {errors.contact_person && (
+          <p className="text-red-500 text-sm mt-1">{errors.contact_person.message}</p>
+        )}
+      </div>
+
+      {/* Contact Email */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Contact Email <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="email"
+          className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors ${mode === "edit" ? "bg-gray-100" : ""}`}
+          {...register("contact_email", {
+            required: "Email is required",
+            pattern: {
+              value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+              message: "Invalid email address",
+            },
+          })}
+          disabled={mode === "edit"}
+        />
+        {errors.contact_email && (
+          <p className="text-red-500 text-sm mt-1">{errors.contact_email.message}</p>
+        )}
+        {mode === "edit" && (
+          <p className="text-gray-500 text-sm mt-1">Email cannot be changed after creation</p>
+        )}
+      </div>
+
+      {/* Contact Phone */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Contact Phone
+        </label>
+        <input
+          type="tel"
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+          {...register("contact_phone", {
+            pattern: {
+              value: /^[+]?[0-9]{10,15}$/,
+              message: "Invalid phone number",
+            },
+          })}
+          placeholder="+91 99999 99999"
+        />
+        {errors.contact_phone && (
+          <p className="text-red-500 text-sm mt-1">{errors.contact_phone.message}</p>
+        )}
+      </div>
+    </div>
+  );
       case 3:
+        return (
+          <div className="space-y-6">
+            {/* Contract Dates */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Contract Start Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                  {...register("contract_start_date", {
+                    required: "Contract start date is required",
+                  })}
+                />
+                {errors.contract_start_date && (
+                  <p className="text-red-500 text-sm mt-1">{errors.contract_start_date.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Contract End Date
+                </label>
+                <input
+                  type="date"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+                  {...register("contract_end_date")}
+                />
+                <p className="text-sm text-gray-500 mt-1">Leave blank for ongoing contract</p>
+              </div>
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Status <span className="text-red-500">*</span>
+              </label>
+              <Controller
+                name="status"
+                control={control}
+                render={({ field }) => (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {["Active", "Inactive", "Suspended", "Pending"].map((option) => (
+                      <div
+                        key={option}
+                        className={`border rounded-lg p-4 cursor-pointer transition-all ${field.value === option
+                            ? "border-primary bg-primary/5"
+                            : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        onClick={() => field.onChange(option)}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Radio
+                            checked={field.value === option}
+                            onChange={() => field.onChange(option)}
+                          />
+                          <div>
+                            <h4 className="font-medium text-gray-800">{option}</h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {option === "Active" && "Company is active and operational"}
+                              {option === "Inactive" && "Company account is inactive"}
+                              {option === "Suspended" && "Company account is suspended"}
+                              {option === "Pending" && "Awaiting activation"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              />
+            </div>
+          </div>
+        );
+
+      case 4:
         const formData = getValues();
         return (
           <div className="space-y-6">
@@ -899,119 +1239,174 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
                   onClick={() => setActiveStep(0)}
                   className="text-primary hover:text-primary/80 text-sm font-medium"
                 >
-                  Edit
+                  Edit All
                 </button>
               </div>
 
               {/* Company Info */}
               <div className="border border-gray-200 rounded-lg p-4">
-                <h4 className="font-medium text-gray-700 mb-2">Company Information</h4>
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-medium text-gray-700">Company Information</h4>
+                  <button
+                    type="button"
+                    onClick={() => setActiveStep(0)}
+                    className="text-primary hover:text-primary/80 text-sm"
+                  >
+                    Edit
+                  </button>
+                </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-500">Name:</span>
-                    <span className="ml-2 font-medium">{formData.companyName}</span>
+                    <span className="text-gray-500">Company Name:</span>
+                    <span className="ml-2 font-medium">{formData.company_name}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Domain:</span>
-                    <span className="ml-2 font-medium">{formData.domain || "Not set"}</span>
+                    <span className="text-gray-500">GSTIN:</span>
+                    <span className="ml-2 font-medium">{formData.GSTIN || "Not provided"}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Registration:</span>
-                    <span className="ml-2 font-medium">{formData.registrationNumber || "Not set"}</span>
+                    <span className="text-gray-500">Industry Type:</span>
+                    <span className="ml-2 font-medium">{formData.industry_type}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Employee Limit:</span>
-                    <span className="ml-2 font-medium">
-                      {formData.employeeLimit || "Unlimited (based on plan)"}
-                    </span>
+                    <span className="text-gray-500">Tax ID:</span>
+                    <span className="ml-2 font-medium">{formData.tax_id || "Not provided"}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Owner Info */}
+              {/* Bank Info */}
               <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex justify-between items-start">
-                  <h4 className="font-medium text-gray-700 mb-2">Admin Details</h4>
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-medium text-gray-700">Bank Details</h4>
                   <button
                     type="button"
                     onClick={() => setActiveStep(1)}
-                    className="text-primary hover:text-primary/80 text-sm font-medium"
+                    className="text-primary hover:text-primary/80 text-sm"
                   >
                     Edit
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-500">Name:</span>
-                    <span className="ml-2 font-medium">{formData.ownerName}</span>
+                    <span className="text-gray-500">Bank Name:</span>
+                    <span className="ml-2 font-medium">{formData.bank_name}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Email:</span>
-                    <span className="ml-2 font-medium">{formData.ownerEmail}</span>
-                    {emailVerified && (
-                      <span className="ml-2 text-green-600">✓ Verified</span>
-                    )}
+                    <span className="text-gray-500">Account Holder:</span>
+                    <span className="ml-2 font-medium">{formData.account_holder_name}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Phone:</span>
-                    <span className="ml-2 font-medium">{formData.ownerPhone || "Not set"}</span>
+                    <span className="text-gray-500">Account Number:</span>
+                    <span className="ml-2 font-medium">{formData.account_number}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">IFSC Code:</span>
+                    <span className="ml-2 font-medium">{formData.ifsc_code}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Branch:</span>
+                    <span className="ml-2 font-medium">{formData.branch_name || "Not provided"}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Account Type:</span>
+                    <span className="ml-2 font-medium">{formData.account_type}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Payment Terms:</span>
+                    <span className="ml-2 font-medium">{formData.payment_terms}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Access Level:</span>
+                    <span className="ml-2 font-medium">{formData.role_name}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Modules & Plan */}
+              {/* Contact Info */}
               <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex justify-between items-start">
-                  <h4 className="font-medium text-gray-700 mb-2">Modules & Plan</h4>
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-medium text-gray-700">Contact Details</h4>
                   <button
                     type="button"
                     onClick={() => setActiveStep(2)}
-                    className="text-primary hover:text-primary/80 text-sm font-medium"
+                    className="text-primary hover:text-primary/80 text-sm"
                   >
                     Edit
                   </button>
                 </div>
-                <div className="space-y-3 text-sm">
+                <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-500">Selected Modules:</span>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {Object.entries(formData.modules)
-                        .filter(([_, selected]) => selected)
-                        .map(([key]) => {
-                          const moduleItem = modules.find(m => m.id === key);
-                          return (
-                            <span
-                              key={key}
-                              className="px-2 py-1 bg-primary/10 text-primary rounded text-xs"
-                            >
-                              {moduleItem?.label}
-                            </span>
-                          );
-                        })}
-                    </div>
+                    <span className="text-gray-500">Contact Person:</span>
+                    <span className="ml-2 font-medium">{formData.contact_person}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Subscription Plan:</span>
+                    <span className="text-gray-500">Email:</span>
+                    <span className="ml-2 font-medium">{formData.contact_email}</span>
+               
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Phone:</span>
+                    <span className="ml-2 font-medium">{formData.contact_phone || "Not provided"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contract Info */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-medium text-gray-700">Contract Details</h4>
+                  <button
+                    type="button"
+                    onClick={() => setActiveStep(3)}
+                    className="text-primary hover:text-primary/80 text-sm"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Start Date:</span>
+                    <span className="ml-2 font-medium">{formData.contract_start_date}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">End Date:</span>
                     <span className="ml-2 font-medium">
-                      {plans.find(p => p.id === formData.subscriptionPlan)?.label}
-                    </span>
-                    <span className="ml-2 text-primary">
-                      ({plans.find(p => p.id === formData.subscriptionPlan)?.price})
+                      {formData.contract_end_date || "Ongoing"}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-gray-500">Timezone:</span>
-                      <span className="ml-2 font-medium">
-                        {timezones.find(tz => tz.value === formData.timezone)?.label}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Currency:</span>
-                      <span className="ml-2 font-medium">
-                        {currencies.find(c => c.code === formData.currency)?.name}
-                      </span>
-                    </div>
+                  <div>
+                    <span className="text-gray-500">Status:</span>
+                    <span className="ml-2 font-medium">{formData.status}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address Info */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-700 mb-2">Address Information</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Street:</span>
+                    <span className="ml-2 font-medium">{formData.street || "Not provided"}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">City:</span>
+                    <span className="ml-2 font-medium">{formData.city}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">State:</span>
+                    <span className="ml-2 font-medium">{formData.state}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Country:</span>
+                    <span className="ml-2 font-medium">
+                      {countries.find(c => c.value === formData.country)?.label}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Postal Code:</span>
+                    <span className="ml-2 font-medium">{formData.postal_code}</span>
                   </div>
                 </div>
               </div>
@@ -1037,69 +1432,13 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
                       Accept Terms & Conditions <span className="text-red-500">*</span>
                     </label>
                     <p className="text-sm text-gray-600 mt-1">
-                      I agree to the{" "}
-                      <button
-                        type="button"
-                        className="text-primary hover:text-primary/80 font-medium"
-                        onClick={() => toast.info("Terms & Conditions modal would open here")}
-                      >
-                        Terms of Service
-                      </button>{" "}
-                      and{" "}
-                      <button
-                        type="button"
-                        className="text-primary hover:text-primary/80 font-medium"
-                        onClick={() => toast.info("Privacy Policy modal would open here")}
-                      >
-                        Privacy Policy
-                      </button>
+                      I agree to the company terms and policies
                     </p>
                   </div>
                 </div>
                 {errors.acceptTerms && (
                   <p className="text-red-500 text-sm mt-2">You must accept the Terms & Conditions</p>
                 )}
-              </div>
-            )}
-
-            {/* Activation Email Toggle (only for add mode) */}
-            {mode === "add" && (
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium text-gray-700">Send Activation Email Now</h4>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {watch("sendActivationEmail")
-                        ? "Invitation email will be sent immediately to the admin"
-                        : "Company will remain in 'Pending Activation' status"}
-                    </p>
-                  </div>
-                  <Controller
-                    name="sendActivationEmail"
-                    control={control}
-                    render={({ field }) => (
-                      <div className="relative inline-block w-12 h-6">
-                        <input
-                          type="checkbox"
-                          checked={field.value}
-                          onChange={field.onChange}
-                          className="sr-only"
-                          id="activation-toggle"
-                        />
-                        <label
-                          htmlFor="activation-toggle"
-                          className={`block w-12 h-6 rounded-full cursor-pointer transition-colors ${field.value ? "bg-primary" : "bg-gray-300"
-                            }`}
-                        >
-                          <span
-                            className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${field.value ? "transform translate-x-6" : ""
-                              }`}
-                          />
-                        </label>
-                      </div>
-                    )}
-                  />
-                </div>
               </div>
             )}
 
@@ -1112,9 +1451,9 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
                 rows={3}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
                 placeholder={
-                  mode === "add" 
-                    ? "e.g., 'Custom branding requested', 'Special pricing applied', etc."
-                    : "Describe the changes made or any special instructions..."
+                  mode === "add"
+                    ? "e.g., 'Special requirements', 'Custom setup needed', etc."
+                    : "Describe the changes made..."
                 }
                 {...register("finalComments")}
               />
@@ -1143,7 +1482,7 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
               <Link href="/super-admin/companies">Companies</Link>
             </li>
             <li className="breadcrumb-item active">
-              {mode === "add" ? "Register Company" : `Edit Company`}
+              {mode === "add" ? "Add Company" : `Edit Company`}
             </li>
           </ol>
         </nav>
@@ -1152,10 +1491,10 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800">
-          {mode === "add" ? "Register New Company" : `Edit Company: ${companyData?.companyName}`}
+          {mode === "add" ? "Add New Company" : `Edit Company: ${companyData?.company_name}`}
         </h1>
         <p className="text-gray-600 mt-2">
-          {mode === "add" ? "Onboard a new company step by step" : "Update company information"}
+          {mode === "add" ? "Add a new company to the system" : "Update company information"}
           {mode === "edit" && companyData && (
             <span className="ml-2 text-sm bg-gray-100 px-2 py-1 rounded">
               ID: {companyData.id}
@@ -1180,14 +1519,15 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
                 {Math.round(((activeStep + 1) / steps.length) * 100)}% Complete
               </span>
               {mode === "edit" && companyData && (
-                <span className={`ml-2 px-2 py-1 rounded text-xs ${
-                  companyData.status === "active" 
+                <span className={`ml-2 px-2 py-1 rounded text-xs ${companyData.status === "Active"
                     ? "bg-green-100 text-green-800"
-                    : companyData.status === "inactive"
-                    ? "bg-red-100 text-red-800"
-                    : "bg-yellow-100 text-yellow-800"
-                }`}>
-                  {companyData.status.charAt(0).toUpperCase() + companyData.status.slice(1)}
+                    : companyData.status === "Inactive"
+                      ? "bg-red-100 text-red-800"
+                      : companyData.status === "Suspended"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-gray-100 text-gray-800"
+                  }`}>
+                  {companyData.status}
                 </span>
               )}
             </div>
@@ -1283,7 +1623,7 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
-                        {mode === "add" ? "Create Company & Invite Admin" : "Update Company"}
+                        {mode === "add" ? "Create Company" : "Update Company"}
                       </div>
                     )}
                   </button>
@@ -1302,24 +1642,24 @@ const AddEditCompanyMainArea: React.FC<AddEditCompanyMainAreaProps> = ({
           </svg>
           <div>
             <h4 className="font-medium text-blue-800">
-              {mode === "add" ? "Onboarding Tips" : "Editing Tips"}
+              {mode === "add" ? "Important Notes" : "Editing Guidelines"}
             </h4>
             <ul className="mt-2 text-blue-700 text-sm space-y-1">
               {mode === "add" ? (
                 <>
-                  <li>• Company domain must end with <code>.myhrms.com</code></li>
-                  <li>• Verify admin email to ensure uniqueness before proceeding</li>
-                  <li>• At least one module must be selected for company setup</li>
-                  <li>• Timezone and currency settings affect payroll and attendance calculations</li>
-                  <li>• Activation emails include temporary credentials for admin login</li>
+                  <li>• All fields marked with * are required</li>
+                  <li>• Enter 6-digit PIN code to auto-fill city and state (India only)</li>
+                  <li>• Enter 11-character IFSC code to auto-fill bank details</li>
+                  <li>• Verify contact email before proceeding</li>
+                  <li>• Access level defines user permissions for the company</li>
                 </>
               ) : (
                 <>
-                  <li>• Company name and domain cannot be changed after creation</li>
-                  <li>• Admin email cannot be changed for security reasons</li>
-                  <li>• Changing subscription plan may affect billing</li>
-                  <li>• Module changes may require additional configuration</li>
-                  <li>• Timezone changes affect future date calculations</li>
+                  <li>• Contact email cannot be changed after creation</li>
+                  <li>• PIN code auto-fill works for Indian addresses only</li>
+                  <li>• IFSC code validation available for Indian banks</li>
+                  <li>• Status changes may affect user access</li>
+                  <li>• Changes are logged for audit purposes</li>
                 </>
               )}
             </ul>

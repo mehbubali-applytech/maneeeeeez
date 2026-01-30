@@ -30,7 +30,7 @@ const SignUpCoverMain = () => {
                                 <Link href="#" className="authentication-logo logo-white">
                                     <Image src={logoWhite} style={{ width: "100%", height: "auto" }} alt="logo" />
                                 </Link>
-                                <h4 className="mb-[15px]">Welcome to BBH</h4>
+                                <h4 className="mb-[15px]">Welcome to HRSuite</h4>
                                 <p className="mb-[15px]">Please sign-in to your account and start the adventure</p>
                             </div>
                             {/* Sign Up Cover form */}

@@ -62,90 +62,11 @@ const LiveAttendanceMonitor: React.FC<LiveAttendanceMonitorProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-  // Mock data for today
-  const mockTodayAttendance: IAttendanceRecord[] = useMemo(() => [
-    {
-      id: "1",
-      employeeId: "EMP001",
-      employeeName: "Rajesh Kumar",
-      department: "Engineering",
-      role: "Software Engineer",
-      shiftId: 1,
-      shiftName: "Morning Shift",
-      shiftStartTime: "09:00",
-      shiftEndTime: "18:00",
-      date: new Date().toISOString().split('T')[0],
-      checkInTime: "08:55",
-      checkOutTime: "18:10",
-      checkInLocation: "Bangalore Office",
-      totalHours: 9.25,
-      attendanceStatus: "Present",
-      isManualEntry: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "2",
-      employeeId: "EMP002",
-      employeeName: "Priya Sharma",
-      department: "Marketing",
-      role: "Marketing Manager",
-      shiftId: 2,
-      shiftName: "Evening Shift",
-      shiftStartTime: "14:00",
-      shiftEndTime: "22:00",
-      date: new Date().toISOString().split('T')[0],
-      checkInTime: "14:25",
-      checkOutTime: "22:05",
-      checkInLocation: "Delhi Office",
-      totalHours: 7.67,
-      attendanceStatus: "Late",
-      lateMinutes: 25,
-      isManualEntry: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "3",
-      employeeId: "EMP003",
-      employeeName: "Amit Patel",
-      department: "Sales",
-      role: "Sales Executive",
-      shiftId: 1,
-      shiftName: "Morning Shift",
-      shiftStartTime: "09:00",
-      shiftEndTime: "18:00",
-      date: new Date().toISOString().split('T')[0],
-      checkInTime: "09:15",
-      checkOutTime: undefined,
-      checkInLocation: "Mumbai Office",
-      totalHours: 0,
-      attendanceStatus: "Present",
-      isManualEntry: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "4",
-      employeeId: "EMP004",
-      employeeName: "Sneha Reddy",
-      department: "HR",
-      role: "HR Manager",
-      shiftId: 1,
-      shiftName: "Morning Shift",
-      shiftStartTime: "09:00",
-      shiftEndTime: "18:00",
-      date: new Date().toISOString().split('T')[0],
-      checkInTime: undefined,
-      checkOutTime: undefined,
-      attendanceStatus: "Absent",
-      isManualEntry: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ], []);
 
-  const data = attendanceData.length > 0 ? attendanceData : mockTodayAttendance;
+
+  const data: IAttendanceRecord[] =
+  attendanceData.length > 0 ? attendanceData : [];
+
 
   // Prepare department options for Autocomplete
   const departmentOptions = useMemo(() => {
@@ -181,11 +102,8 @@ const LiveAttendanceMonitor: React.FC<LiveAttendanceMonitorProps> = ({
   }, [autoRefresh, handleRefresh]);
 
   const filteredData = useMemo(() => {
-    return data.filter(record => {
-      // Filter by department
-      if (filterDepartment !== "All" && record.department !== filterDepartment) {
-        return false;
-      }
+    return data.filter((record: IAttendanceRecord) => {
+     
       
       // Filter by shift
       if (filterShift !== "All" && record.shiftName !== filterShift) {
@@ -220,7 +138,9 @@ const LiveAttendanceMonitor: React.FC<LiveAttendanceMonitorProps> = ({
 
   const getAttendanceSummary = () => {
     const total = filteredData.length;
-    const present = filteredData.filter(r => r.attendanceStatus === 'Present').length;
+    const present = filteredData.filter(
+  (r: IAttendanceRecord) => r.attendanceStatus === "Present"
+).length;
     const absent = filteredData.filter(r => r.attendanceStatus === 'Absent').length;
     const late = filteredData.filter(r => r.attendanceStatus === 'Late').length;
     const checkedIn = filteredData.filter(r => r.checkInTime).length;
