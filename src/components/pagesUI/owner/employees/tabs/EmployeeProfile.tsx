@@ -76,13 +76,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
   const [sendEmailDialog, setSendEmailDialog] = useState(false);
   const [emailType, setEmailType] = useState<'welcome' | 'credentials' | 'update'>('welcome');
 
-  const tabs = [
-    { label: 'Overview', icon: <Person /> },
-    { label: 'Job Details', icon: <Work /> },
-    { label: 'Salary', icon: <AttachMoney /> },
-    { label: 'Documents', icon: <Description /> },
-    { label: 'Access', icon: <Security /> }
-  ];
+const tabs = [
+  { label: 'Overview', icon: <Person /> },
+  { label: 'Job Details', icon: <Work /> },
+  { label: 'Salary', icon: <AttachMoney /> },
+  { label: 'Access', icon: <Security /> }
+  // Remove Documents tab
+];
 
   const getStatusColor = (status: string) => {
     switch(status) {

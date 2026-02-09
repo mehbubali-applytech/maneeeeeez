@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 export type RowObject = { [key: string]: string | number | boolean };
 type Order = "asc" | "desc";
 
@@ -14,6 +14,9 @@ function useMaterialTableHook<T extends RowObject>(
   const [rowsPerPage, setRowsPerPage] = useState(defalutData);
   const [searchQuery, setSearchQuery] = useState("");
 
+    useEffect(() => {
+    setPage(1);
+  }, [rowsPerPage, searchQuery, initialRows.length]);
   const handleRequestSort = (property: string) => {
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");

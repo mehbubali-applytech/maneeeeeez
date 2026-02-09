@@ -101,7 +101,6 @@ const AccessTab: React.FC<AccessTabProps> = ({
 
   const generatePassword = () => {
     setGeneratingPassword(true);
-    // Simulate password generation
     setTimeout(() => {
       const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
       let password = "";
@@ -135,7 +134,6 @@ const AccessTab: React.FC<AccessTabProps> = ({
     }
 
     try {
-      // API call to send onboarding email
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/owner/employee/send-onboarding-email`,
         { email, username },

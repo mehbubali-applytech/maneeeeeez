@@ -523,7 +523,7 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                                     </button>
                                   </Tooltip> */}
                                   
-                                  <Tooltip title="View Details">
+                                  {/* <Tooltip title="View Details">
                                     <button
                                       type="button"
                                       className="table__icon p-1.5 hover:bg-green-100 rounded"
@@ -535,7 +535,7 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                                     >
                                       <i className="fa-light fa-eye text-green-600"></i>
                                     </button>
-                                  </Tooltip>
+                                  </Tooltip> */}
                                   
                                   {/* <Tooltip title="Assign Employees">
                                     <button
@@ -655,7 +655,7 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
             </Grid>
 
             {/* Bulk Actions Bar */}
-            {selected.length > 0 && (
+            {/* {selected.length > 0 && (
               <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-4 z-50 border border-blue-700">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
@@ -686,7 +686,7 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                     <i className="fa-solid fa-toggle-on"></i>
                     Toggle Status
                   </button>
-                  {/* <button
+                  <button
                     className="px-3 py-1.5 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600 transition-colors flex items-center gap-1"
                     onClick={() => {
                       if (confirm(`Are you sure you want to delete ${selected.length} branch${selected.length > 1 ? 'es' : ''}?`)) {
@@ -699,7 +699,7 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                   >
                     <i className="fa-regular fa-trash"></i>
                     Delete
-                  </button> */}
+                  </button>
                   <button
                     className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-sm font-medium hover:bg-gray-300 transition-colors"
                     onClick={() => handleSelectAllClick(false, [])}
@@ -708,7 +708,7 @@ const BranchTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange }
                   </button>
                 </div>
               </div>
-            )}
+            )} */}
           </div>
         </div>
       </div>

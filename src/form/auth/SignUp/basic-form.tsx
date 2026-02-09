@@ -29,6 +29,10 @@ const SignUpBasicForm = () => {
                 router.push("/owner");
             }
         }
+        if (localStorage.getItem("companyName") && localStorage.getItem("contactPerson")) {
+            localStorage.removeItem("companyName");
+            localStorage.removeItem("contactPerson");
+        }
     }, [router]);
 
     const onSubmit = async (data: ISignUpForm) => {

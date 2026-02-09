@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   Box,
   Paper,
@@ -37,7 +37,7 @@ const headCells = [
   { id: "email", label: "Email" },
   { id: "phoneNumber", label: "Phone" },
   { id: "designation", label: "Designation" },
-  { id: "departmentName", label: "Department" },
+  // { id: "departmentName", label: "Department" },
   { id: "dateOfJoining", label: "Date of Joining" },
   { id: "employmentStatus", label: "Status" },
 ];
@@ -107,7 +107,7 @@ const EmployeeTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange
       "Email",
       "Phone",
       "Designation",
-      "Department",
+      // "Department",
       "Date of Joining",
       "Status",
       "Work Type",
@@ -120,8 +120,8 @@ const EmployeeTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange
         employee.email,
         employee.phoneNumber || "-",
         employee.designation || "-",
-        employee.departmentName || "-",
-        formatDate(employee.dateOfJoining),
+        // employee.departmentName || "-",
+        formatDate(employee.date_of_joining),
         employee.employmentStatus,
         employee.workType,
       ];
@@ -133,6 +133,7 @@ const EmployeeTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange
       title: `Employees Export - ${filteredRows.length} records`
     };
   }, [filteredRows]);
+
 
   return (
     <div className="card__wrapper">
@@ -153,7 +154,6 @@ const EmployeeTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange
               className="manaz-table-search-input"
               sx={{ width: '100%', maxWidth: 300 }}
               placeholder="Search employees..."
-              disabled={filteredRows.length === 0}
             />
           </Box>
         </Grid>
@@ -305,7 +305,7 @@ const EmployeeTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange
                           <div className="font-medium">{row.designation || "-"}</div>
                         </TableCell>
 
-                        <TableCell>
+                        {/* <TableCell>
                           {row.departmentName ? (
                             <Chip
                               label={row.departmentName}
@@ -316,7 +316,7 @@ const EmployeeTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange
                           ) : (
                             <span className="text-gray-400 italic">Not assigned</span>
                           )}
-                        </TableCell>
+                        </TableCell> */}
 
                         <TableCell>
                           <span className="text-sm text-gray-600">
@@ -387,7 +387,7 @@ const EmployeeTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange
       </Box>
 
       {/* Summary Stats */}
-      {filteredRows.length > 0 && (
+      {/* {filteredRows.length > 0 && (
         <div className="mb-4 p-4 bg-gray-50 rounded-lg">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="text-center">
@@ -419,7 +419,7 @@ const EmployeeTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Bottom Controls */}
       {filteredRows.length > 0 && (
@@ -467,14 +467,18 @@ const EmployeeTable: React.FC<Props> = ({ data, onEdit, onDelete, onStatusChange
           <Grid item xs={12} md={3}>
             <Box className="flex justify-end">
               <Pagination
-                count={Math.ceil(filteredRows.length / rowsPerPage)}
-                page={page}
-                onChange={(e, value) => handleChangePage(value)}
-                variant="outlined"
-                shape="rounded"
-                className="manaz-pagination-button"
-                size="small"
-              />
+  count={Math.ceil(filteredRows.length / rowsPerPage)}
+  page={page}
+  onChange={(e, value) => handleChangePage(value)}
+  variant="outlined"
+  shape="rounded"
+  size="small"
+  showFirstButton
+  showLastButton
+  siblingCount={1}
+  boundaryCount={1}
+/>
+
             </Box>
           </Grid>
         </Grid>

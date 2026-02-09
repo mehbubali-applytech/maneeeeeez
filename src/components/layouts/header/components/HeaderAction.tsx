@@ -12,7 +12,7 @@ import FrenchFlag from '@/svg/header-svg/FrenchFlag';
 import WorldSvg from '@/svg/header-svg/WorldSvg';
 import ZoomScreen from '@/svg/header-svg/ZoomScreen';
 
-const HeaderAction = () => {
+const HeaderAction = ({ cData }: { cData?: any }) => {
      // State to manage dropdown visibility
      const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
      const [isOpenLanguage, setIsOpenLanguage] = useState<boolean>(false);
@@ -90,7 +90,7 @@ const HeaderAction = () => {
                                 </span>
                                 <span className="language-text">English</span>
                             </button>
-                            {isOpenLanguage && (
+                            {/* {isOpenLanguage && (
                             <div className={`lang__dropdown ${isOpenLanguage ? "lang-enable" : " "}`} >
                                 <ul>
                                     <li>
@@ -145,7 +145,7 @@ const HeaderAction = () => {
                                     </li>
                                 </ul>
                             </div>
-                            )}
+                            )} */}
                         </div>
                     </li>
                     <li>
@@ -161,7 +161,7 @@ const HeaderAction = () => {
                     <Notification handleShowNotification={handleShowNotification} isOpenNotification={isOpenNotification}/>
                 </ul>
             </div>
-            <HeaderUserProfile handleShowUserDrowdown={handleShowUserDrowdown} isOpenUserDropdown={isOpenUserDropdown}/>
+            <HeaderUserProfile handleShowUserDrowdown={handleShowUserDrowdown} isOpenUserDropdown={isOpenUserDropdown} cData={cData} />
         </>
     );
 };

@@ -321,22 +321,6 @@ const EmployeeMainArea: React.FC = () => {
 
         <div className="flex gap-2">
           <Button
-            variant="outlined"
-            startIcon={<Upload />}
-            onClick={handleBulkImport}
-            size="small"
-          >
-            Bulk Import
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<Download />}
-            onClick={handleExportEmployees}
-            size="small"
-          >
-            Export
-          </Button>
-          <Button
             variant="contained"
             startIcon={<PersonAdd />}
             onClick={handleAddEmployee}
@@ -379,54 +363,6 @@ const EmployeeMainArea: React.FC = () => {
         <EmployeeSummary employees={employees} />
       </div>
 
-      {/* Search and Filter Bar */}
-      <Box sx={{ 
-        p: 2, 
-        bgcolor: 'grey.50', 
-        borderRadius: 1, 
-        mb: 3,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 2
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-          <Search sx={{ mr: 1, color: 'text.secondary' }} />
-          <input
-            type="text"
-            placeholder="Search employees by name, email, or employee code..."
-            className="form-control border-0 bg-transparent focus:outline-none"
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-        </Box>
-        
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            variant={statusFilter === "All" ? "contained" : "outlined"}
-            size="small"
-            className="!text-white"
-            onClick={() => handleStatusFilter("All")}
-          >
-            All
-          </Button>
-          <Button
-            variant={statusFilter === "Active" ? "contained" : "outlined"}
-            size="small"
-            color="success"
-            onClick={() => handleStatusFilter("Active")}
-          >
-            Active
-          </Button>
-          <Button
-            variant={statusFilter === "Inactive" ? "contained" : "outlined"}
-            size="small"
-            color="error"
-            onClick={() => handleStatusFilter("Inactive")}
-          >
-            Inactive
-          </Button>
-        </Box>
-      </Box>
 
       {/* Employee Table */}
       <EmployeeTable

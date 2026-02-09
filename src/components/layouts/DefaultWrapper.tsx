@@ -7,18 +7,21 @@ import DashboardFooter from "./footer/FooterOne";
 import DashboardHeader from "./header/DashboardHeader";
 import DashBoardSidebar from "./sidebar/DashBoardSidebar";
 import useGlobalContext from "@/hooks/use-context";
+import { SessionResponseData } from "../pagesUI/owner/ownerTypes";
 
 interface WrapperProps {
   children: React.ReactNode;
-  role?: string;
+  role: string;
+  cData?: SessionResponseData | null;
 }
 
-const Wrapper: React.FC<WrapperProps> = ({ children, role="hrm" }) => {
+const Wrapper: React.FC<WrapperProps> = ({ children, role, cData }) => {
   const { theme } = useGlobalContext();
   const pathName = usePathname();
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    console.log(cData)
     const loadingTimeout = setTimeout(() => setIsLoading(false), 2000);
     return () => clearTimeout(loadingTimeout);
   }, []);
@@ -26,7 +29,7 @@ const Wrapper: React.FC<WrapperProps> = ({ children, role="hrm" }) => {
   const renderHeader = () => {
     switch (pathName) {
       default:
-        return <DashboardHeader />;
+        return <DashboardHeader cData={cData} />;
     }
   };
 

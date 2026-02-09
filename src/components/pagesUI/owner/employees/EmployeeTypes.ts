@@ -304,8 +304,7 @@ export interface IGeoFence {
   radius: number; // in meters
   address?: string;
 }
-
-
+// Add these to your existing IEmployeeForm interface
 export interface IEmployeeForm {
   // Personal Info
   firstName: string;
@@ -340,7 +339,7 @@ export interface IEmployeeForm {
   workType: "Full-time" | "Part-time" | "Contract" | "Intern";
   employmentStatus:
     | "Active"
-    | "Inactive"  // ADD THIS
+    | "Inactive"
     | "On Probation"
     | "Resigned"
     | "Terminated"
@@ -349,7 +348,7 @@ export interface IEmployeeForm {
   contractEndDate?: string;
 
   // Salary
-  salary_structure?: any; // ADD THIS
+  salary_structure?: any;
   salaryGrade?: string;
   costToCompany?: number;
   basicPay?: number;
@@ -373,8 +372,39 @@ export interface IEmployeeForm {
   geoFence?: IGeoFence;
   systemUserEnabled: boolean;
   username?: string;
+  password?: string;
   roleIds?: number[];
   temporaryAccessUntil?: string;
+
+  // API-specific fields
+  attributes?: Array<{ key: string; value: string }>;
+  branch_id?: number;
+  department_id?: number;
+  
+  // Additional form fields
+  profilePhotoFile?: File;
+  employee_code?: string;
+  
+  // Address fields for attributes
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  zip_code?: string;
+  
+  // Emergency contact fields for attributes
+  emergency_contact_name?: string;
+  emergency_contact_relation?: string;
+  emergency_contact_phone?: string;
+  
+  // Other attributes
+  work_type?: string;
+  employment_status?: string;
+  attendance_type?: string;
+  date_of_birth?: string;
+  gender_attribute?: string;
+  preferred_name?: string;
 }
 
 // Mock Data

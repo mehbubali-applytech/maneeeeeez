@@ -636,7 +636,7 @@ const ShiftTable: React.FC<ShiftTableProps> = ({
       </div>
 
       {/* Bulk Actions Bar */}
-      {selected.length > 0 && !isEmpty && (
+      {/* {selected.length > 0 && !isEmpty && (
         <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-4 z-50">
           <Typography variant="body2" className="text-white">
             {selected.length} shift{selected.length > 1 ? 's' : ''} selected
@@ -660,7 +660,7 @@ const ShiftTable: React.FC<ShiftTableProps> = ({
             </button>
           </div>
         </div>
-      )}
+      )} */}
 
       {modalDeleteOpen && (
         <DeleteModal

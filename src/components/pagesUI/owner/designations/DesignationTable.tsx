@@ -403,7 +403,7 @@ const DesignationTable: React.FC<Props> = ({ data, onEdit, onDelete }) => {
       )}
 
       {/* Bulk Actions Bar */}
-      {selected.length > 0 && filteredRows.length > 0 && (
+      {/* {selected.length > 0 && filteredRows.length > 0 && (
         <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-4 z-50">
           <Typography variant="body2" className="text-white">
             {selected.length} designation{selected.length > 1 ? 's' : ''} selected
@@ -435,7 +435,7 @@ const DesignationTable: React.FC<Props> = ({ data, onEdit, onDelete }) => {
             </button>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 };

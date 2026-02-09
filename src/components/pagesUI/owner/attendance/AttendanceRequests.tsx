@@ -74,10 +74,13 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [requests, setRequests] = useState<ICorrectedAttendance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<number | null>(null); // Track which request is being processed
   const [selectedRequest, setSelectedRequest] = useState<ICorrectedAttendance | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -88,7 +91,7 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
   // Fetch corrected attendance data
   useEffect(() => {
     fetchCorrectedAttendance();
-  }, []);
+  }, [approving, rejecting]);
 
   const fetchCorrectedAttendance = async () => {
     try {
@@ -150,6 +153,7 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
 
   const handleApprove = async (correctedAttendanceId: number) => {
     try {
+      setActionLoading(correctedAttendanceId);
       const payload = {
         status: "Approved",
         approved_by: 1, // Replace with actual user ID from auth
@@ -157,29 +161,50 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
       };
 
       const response = await approveAbsentCorrection(correctedAttendanceId, payload);
-      
-      if (response && response.errorCode === 0) {
+      setApproving(true);
+      // Handle API response
+      if (response.status === 200) {
         setSnackbar({
           open: true,
-          message: 'Correction request approved successfully',
+          message: response.message || 'Correction request approved successfully',
           severity: 'success'
         });
-        fetchCorrectedAttendance(); // Refresh data
+        
+        // Update the specific request in state
+        setRequests(prev => prev.map(request => 
+          request.corrected_attendance_id === correctedAttendanceId 
+            ? { 
+                ...request, 
+                status: 'Approved',
+                approved_by: payload.approved_by,
+                approved_at: new Date().toISOString()
+              }
+            : request
+        ));
+        
+        // Call parent callback if provided
+        if (onApprove) {
+          onApprove(correctedAttendanceId.toString());
+        }
+      } else {
+        throw new Error(response?.errorMessage || 'Failed to approve request');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error approving correction:', error);
       setSnackbar({
         open: true,
-        message: 'Failed to approve correction request',
+        message: error.message || 'Failed to approve correction request',
         severity: 'error'
       });
     } finally {
+      setActionLoading(null);
       setApproveDialogOpen(false);
     }
   };
 
   const handleReject = async (correctedAttendanceId: number) => {
     try {
+      setActionLoading(correctedAttendanceId);
       const payload = {
         status: "Rejected",
         approved_by: 1, // Replace with actual user ID from auth
@@ -187,23 +212,43 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
       };
 
       const response = await approveAbsentCorrection(correctedAttendanceId, payload);
-      
-      if (response && response.errorCode === 0) {
+      setRejecting(true);
+      // Handle API response
+      if (response.status === 200) {
         setSnackbar({
           open: true,
-          message: 'Correction request rejected successfully',
+          message: response.message || 'Correction request rejected successfully',
           severity: 'success'
         });
-        fetchCorrectedAttendance(); // Refresh data
+        
+        // Update the specific request in state
+        setRequests(prev => prev.map(request => 
+          request.corrected_attendance_id === correctedAttendanceId 
+            ? { 
+                ...request, 
+                status: 'Rejected',
+                approved_by: payload.approved_by,
+                approved_at: new Date().toISOString()
+              }
+            : request
+        ));
+        
+        // Call parent callback if provided
+        if (onReject) {
+          onReject(correctedAttendanceId.toString());
+        }
+      } else {
+        throw new Error(response?.errorMessage || 'Failed to reject request');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error rejecting correction:', error);
       setSnackbar({
         open: true,
-        message: 'Failed to reject correction request',
+        message: error.message || 'Failed to reject correction request',
         severity: 'error'
       });
     } finally {
+      setActionLoading(null);
       setRejectDialogOpen(false);
       setRejectReason("");
     }
@@ -304,6 +349,22 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
     } catch {
       return 'Invalid Date';
     }
+  };
+
+  // Auto-refresh data after status filter changes
+  useEffect(() => {
+    if (filterStatus !== "All") {
+      const timer = setTimeout(() => {
+        fetchCorrectedAttendance();
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [filterStatus]);
+
+  // Handle snackbar close
+  const handleSnackbarClose = () => {
+    setSnackbar({ ...snackbar, open: false });
   };
 
   return (
@@ -540,7 +601,11 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
                             onClick={() => {
                               setSelectedRequest(request);
                               setDetailDialogOpen(true);
+                              if (onViewDetails) {
+                                onViewDetails(request);
+                              }
                             }}
+                            disabled={actionLoading === request.corrected_attendance_id}
                           >
                             <Visibility fontSize="small" />
                           </IconButton>
@@ -556,8 +621,13 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
                                   setSelectedRequest(request);
                                   setApproveDialogOpen(true);
                                 }}
+                                disabled={actionLoading === request.corrected_attendance_id}
                               >
-                                <CheckCircle fontSize="small" />
+                                {actionLoading === request.corrected_attendance_id ? (
+                                  <CircularProgress size={20} color="success" />
+                                ) : (
+                                  <CheckCircle fontSize="small" />
+                                )}
                               </IconButton>
                             </Tooltip>
                             
@@ -569,8 +639,13 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
                                   setSelectedRequest(request);
                                   setRejectDialogOpen(true);
                                 }}
+                                disabled={actionLoading === request.corrected_attendance_id}
                               >
-                                <Cancel fontSize="small" />
+                                {actionLoading === request.corrected_attendance_id ? (
+                                  <CircularProgress size={20} color="error" />
+                                ) : (
+                                  <Cancel fontSize="small" />
+                                )}
                               </IconButton>
                             </Tooltip>
                           </>
@@ -753,17 +828,30 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
               <Typography variant="body2" color="text.secondary">
                 Time: {selectedRequest.check_in} - {selectedRequest.check_out}
               </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                Reason: {selectedRequest.reason}
+              </Typography>
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setApproveDialogOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={() => setApproveDialogOpen(false)}
+            disabled={actionLoading === selectedRequest?.corrected_attendance_id}
+          >
+            Cancel
+          </Button>
           <Button 
             onClick={() => selectedRequest && handleApprove(selectedRequest.corrected_attendance_id)} 
             variant="contained" 
             className="!text-white"
+            disabled={actionLoading === selectedRequest?.corrected_attendance_id}
           >
-            Approve
+            {actionLoading === selectedRequest?.corrected_attendance_id ? (
+              <CircularProgress size={20} color="inherit" />
+            ) : (
+              'Approve'
+            )}
           </Button>
         </DialogActions>
       </Dialog>
@@ -786,19 +874,29 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 placeholder="Provide a reason for rejection..."
+                disabled={actionLoading === selectedRequest.corrected_attendance_id}
               />
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={() => setRejectDialogOpen(false)}
+            disabled={actionLoading === selectedRequest?.corrected_attendance_id}
+          >
+            Cancel
+          </Button>
           <Button 
             onClick={() => selectedRequest && handleReject(selectedRequest.corrected_attendance_id)} 
             variant="contained" 
             color="error"
-            disabled={!rejectReason.trim()}
+            disabled={!rejectReason.trim() || actionLoading === selectedRequest?.corrected_attendance_id}
           >
-            Reject
+            {actionLoading === selectedRequest?.corrected_attendance_id ? (
+              <CircularProgress size={20} color="inherit" />
+            ) : (
+              'Reject'
+            )}
           </Button>
         </DialogActions>
       </Dialog>
@@ -807,8 +905,9 @@ const AttendanceRequests: React.FC<AttendanceRequestsProps> = ({
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        onClose={handleSnackbarClose}
         message={snackbar.message}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
     </Box>
   );

@@ -314,24 +314,25 @@ const JobDetailsTab: React.FC<JobDetailsTabProps> = ({
                 render={({ field, fieldState }) => (
                   <Autocomplete
                     options={branches}
-                    getOptionLabel={(option) => option.branch_name}
-                    value={branches.find(branch => branch.branch_id === field.value) || null}
-                    onChange={(_, value) => field.onChange(value?.branch_id || '')}
+                    getOptionLabel={(option) => option.branch_name || ""}
+                    value={branches.find(branch => branch.id === field.value) || null}
+                    onChange={(_, value) => field.onChange(value?.id || "")}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
                     renderInput={(params) => (
                       <TextField
                         {...params}
                         size="small"
                         placeholder="Select work location"
-                        error={fieldState.invalid}
+                        error={!!fieldState.error}
                         helperText={fieldState.error?.message}
                       />
                     )}
                     renderOption={(props, option) => (
-                      <MenuItem {...props} key={option.branch_id}>
+                      <MenuItem {...props} key={option.id}>
                         <Box>
                           <Typography variant="body2">{option.branch_name}</Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {option.address}
+                            {option.address?.city}, {option.address?.state}
                           </Typography>
                         </Box>
                       </MenuItem>
@@ -339,6 +340,7 @@ const JobDetailsTab: React.FC<JobDetailsTabProps> = ({
                   />
                 )}
               />
+
             </Box>
 
             {/* Work Type */}

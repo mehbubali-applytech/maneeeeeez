@@ -8,6 +8,7 @@ import SignUpBasicForm from '@/form/auth/SignUp/basic-form';
 
 const SignUpBasicMain = () => {
 
+
     
     return (
         <>

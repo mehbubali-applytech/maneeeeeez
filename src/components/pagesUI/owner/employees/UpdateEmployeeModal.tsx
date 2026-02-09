@@ -46,7 +46,6 @@ import axios from "axios";
 import PersonalInfoTab from "./tabs/PersonalInfoTab";
 import JobDetailsTab from "./tabs/JobDetailsTab";
 import SalaryTab from "./tabs/SalaryTab";
-import DocumentsTab from "./tabs/DocumentsTab";
 import AccessTab from "./tabs/AccessTab";
 
 import { IEmployeeForm, IEmployee, EMPLOYMENT_STATUS_OPTIONS } from "./EmployeeTypes";
@@ -61,7 +60,6 @@ const steps = [
   { label: 'Personal Info', icon: <Person /> },
   { label: 'Job Details', icon: <Work /> },
   { label: 'Salary & Compensation', icon: <AttachMoney /> },
-  { label: 'Documents', icon: <Description /> },
   { label: 'Attendance & Access', icon: <AccessTime /> }
 ];
 
@@ -119,7 +117,9 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
       documents: [],
       newDocuments: [],
       salary_structure: {},
-      roleIds: []
+      roleIds: [],
+      attributes: [],
+      username: ''
     }
   });
 
@@ -162,7 +162,7 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
           setBranches(branchResponse.data.data);
         }
 
-        // Fetch roles - create this endpoint or use existing one
+        // Fetch roles
         try {
           const rolesResponse = await axios.get(
             `${process.env.NEXT_PUBLIC_API_URL}/roles`,
@@ -173,7 +173,6 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
           }
         } catch (rolesError) {
           console.warn("Roles endpoint not available, using default roles");
-          // Use default roles if endpoint doesn't exist
           setRoles([
             { role_id: 1, role_name: "Employee", description: "Basic employee access" },
             { role_id: 2, role_name: "Manager", description: "Department management access" },
@@ -213,11 +212,11 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
               email: emp.email,
               phoneNumber: emp.phone,
               dateOfJoining: emp.date_of_joining,
-              workType: 'Full-time', // Default
+              workType: 'Full-time',
               employmentStatus: emp.is_active === 1 ? 'Active' : 'Inactive',
-              attendanceType: 'Biometric', // Default
+              attendanceType: 'Biometric',
               systemUserEnabled: !!emp.User?.username,
-              payFrequency: 'Monthly', // Default
+              payFrequency: 'Monthly',
               roleId: emp.User?.userRoles?.[0]?.role?.role_id || 0,
               departmentId: emp.department_id || 0,
               workLocationId: emp.branch_id || 0,
@@ -240,11 +239,42 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
               
               allowances: [],
               deductions: [],
-              documents: emp.documents || [],
+              documents: [],
               newDocuments: [],
               
-              roleIds: emp.User?.userRoles?.map((ur: any) => ur.role_id) || []
+              roleIds: emp.User?.userRoles?.map((ur: any) => ur.role_id) || [],
+              
+              // New fields
+              username: emp.User?.username || '',
+              attributes: emp.EmployeeAttributes?.map((attr: any) => ({
+                key: attr.attribute_key,
+                value: attr.attribute_value
+              })) || []
             };
+            
+            // Load address from attributes if available
+            const addressAttr = emp.EmployeeAttributes?.find((attr: any) => 
+              ['address_line1', 'city', 'state', 'country', 'zip_code'].includes(attr.attribute_key)
+            );
+            
+            if (addressAttr) {
+              const addressObj = emp.EmployeeAttributes?.reduce((acc: any, attr: any) => {
+                if (attr.attribute_key === 'address_line1') acc.addressLine1 = attr.attribute_value;
+                if (attr.attribute_key === 'city') acc.city = attr.attribute_value;
+                if (attr.attribute_key === 'state') acc.state = attr.attribute_value;
+                if (attr.attribute_key === 'country') acc.country = attr.attribute_value;
+                if (attr.attribute_key === 'zip_code') acc.zipCode = attr.attribute_value;
+                return acc;
+              }, {});
+              
+              formData.presentAddress = {
+                addressLine1: addressObj.addressLine1 || '',
+                city: addressObj.city || '',
+                state: addressObj.state || '',
+                country: addressObj.country || 'India',
+                zipCode: addressObj.zipCode || ''
+              };
+            }
             
             reset(formData);
             
@@ -290,12 +320,10 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
       case 0: // Personal Info
         return ['firstName', 'lastName', 'email', 'phoneNumber'];
       case 1: // Job Details
-        return ['dateOfJoining', 'designation', 'departmentId'];
+        return ['dateOfJoining', 'designation', 'departmentId', 'workLocationId'];
       case 2: // Salary
         return []; // Optional
-      case 3: // Documents
-        return []; // Optional
-      case 4: // Access
+      case 3: // Access
         return []; // Optional
       default:
         return [];
@@ -306,9 +334,91 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
     setIsSubmitting(true);
 
     try {
+      // Prepare attributes from form data
+      const attributes: Array<{ key: string; value: string }> = [];
+      
+      // Add address as attributes
+      if (data.presentAddress.addressLine1) {
+        attributes.push({ key: 'address_line1', value: data.presentAddress.addressLine1 });
+      }
+      if (data.presentAddress.city) {
+        attributes.push({ key: 'city', value: data.presentAddress.city });
+      }
+      if (data.presentAddress.state) {
+        attributes.push({ key: 'state', value: data.presentAddress.state });
+      }
+      if (data.presentAddress.country) {
+        attributes.push({ key: 'country', value: data.presentAddress.country });
+      }
+      if (data.presentAddress.zipCode) {
+        attributes.push({ key: 'zip_code', value: data.presentAddress.zipCode });
+      }
+      
+      // Add emergency contact as attributes
+      if (data.emergencyContactName) {
+        attributes.push({ key: 'emergency_contact_name', value: data.emergencyContactName });
+      }
+      if (data.emergencyContactRelation) {
+        attributes.push({ key: 'emergency_contact_relation', value: data.emergencyContactRelation });
+      }
+      if (data.emergencyContactPhone) {
+        attributes.push({ key: 'emergency_contact_phone', value: data.emergencyContactPhone });
+      }
+      
+      // Add other form fields as attributes
+      if (data.workType) {
+        attributes.push({ key: 'work_type', value: data.workType });
+      }
+      if (data.employmentStatus) {
+        attributes.push({ key: 'employment_status', value: data.employmentStatus });
+      }
+      if (data.attendanceType) {
+        attributes.push({ key: 'attendance_type', value: data.attendanceType });
+      }
+      if (data.dateOfBirth) {
+        attributes.push({ key: 'date_of_birth', value: data.dateOfBirth });
+      }
+      if (data.gender) {
+        attributes.push({ key: 'gender', value: data.gender });
+      }
+      if (data.preferredName) {
+        attributes.push({ key: 'preferred_name', value: data.preferredName });
+      }
+      
+      // Prepare salary structure from form data
+      const salaryStructure: any = {};
+      
+      if (data.basicPay) {
+        salaryStructure.Earnings = salaryStructure.Earnings || {};
+        salaryStructure.Earnings["Basic Salary"] = data.basicPay.toString();
+      }
+      if (data.hra) {
+        salaryStructure.Earnings = salaryStructure.Earnings || {};
+        salaryStructure.Earnings["House Rent Allowance"] = data.hra.toString();
+      }
+      
+      // Add allowances to salary structure
+      if (data.allowances && data.allowances.length > 0) {
+        salaryStructure.Earnings = salaryStructure.Earnings || {};
+        data.allowances.forEach((allowance: any) => {
+          if (allowance.name && allowance.amount) {
+            salaryStructure.Earnings[allowance.name] = allowance.amount.toString();
+          }
+        });
+      }
+      
+      // Add deductions to salary structure
+      if (data.deductions && data.deductions.length > 0) {
+        salaryStructure.Deductions = salaryStructure.Deductions || {};
+        data.deductions.forEach((deduction: any) => {
+          if (deduction.name && deduction.amount) {
+            salaryStructure.Deductions[deduction.name] = deduction.amount.toString();
+          }
+        });
+      }
+
       // Prepare payload based on API requirements
       const payload = {
-        // Personal Info
         first_name: data.firstName,
         last_name: data.lastName,
         email: data.email,
@@ -316,28 +426,25 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
         designation: data.designation,
         date_of_joining: data.dateOfJoining,
         
-        // Job Details
+        // Department and Branch
         department_id: data.departmentId,
         branch_id: data.workLocationId,
         
-        // Salary Structure
-        salary_structure: data.salary_structure,
-        
-        // Attributes (custom fields)
-        attributes: [
-          // Add any custom attributes here
-        ],
-        
-        // Roles
-        roleIds: data.roleIds,
-        
         // System User
         systemUserEnabled: data.systemUserEnabled,
-        username: data.systemUserEnabled ? data.email.split('@')[0] : undefined,
+        username: data.systemUserEnabled ? (data.username || data.email.split('@')[0]) : undefined,
         
-        // Address
-        address: data.presentAddress
+        // Roles
+        roleIds: data.roleIds || [],
+        
+        // Salary Structure
+        salary_structure: Object.keys(salaryStructure).length > 0 ? salaryStructure : {},
+        
+        // Attributes (all other fields as key-value pairs)
+        attributes: attributes
       };
+
+      console.log('Submitting payload:', payload);
 
       let response;
       
@@ -444,8 +551,6 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
       case 2:
         return <SalaryTab />;
       case 3:
-        return <DocumentsTab />;
-      case 4:
         return (
           <AccessTab 
             watchSystemUserEnabled={watchSystemUserEnabled}
@@ -648,7 +753,7 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
                   color="success"
                   className="!text-white"
                   startIcon={<Send />}
-                  onClick={methods.handleSubmit(handleSaveAndActivate)}
+                  onClick={() => methods.handleSubmit(handleSaveAndActivate)()}
                   disabled={isSubmitting || !isValid}
                 >
                   {isSubmitting ? (
@@ -677,7 +782,7 @@ const AddEditEmployee: React.FC<AddEditEmployeeProps> = ({ employee, mode = 'add
                 <Button
                   variant="contained"
                   startIcon={<Save />}
-                  onClick={methods.handleSubmit(handleFinalSubmit)}
+                  onClick={() => methods.handleSubmit(handleFinalSubmit)()}
                   disabled={isSubmitting}
                   className="!text-white"
                 >
@@ -736,8 +841,7 @@ const getStepDescription = (step: number): string => {
     case 0: return "Personal details, contact information, and emergency contacts";
     case 1: return "Job role, department, reporting structure, and employment type";
     case 2: return "Salary structure, bank details, and compensation components";
-    case 3: return "Upload ID proofs, offer letters, and other documents";
-    case 4: return "System access, attendance settings, and permissions";
+    case 3: return "System access, attendance settings, and permissions";
     default: return "";
   }
 };

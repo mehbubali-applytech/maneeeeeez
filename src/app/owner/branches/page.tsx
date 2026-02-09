@@ -8,8 +8,7 @@ const AllCompaniesPage = () => {
     <>
       <MetaData pageTitle="All Companies">
         <Wrapper role={"owner"}>
-                    <BranchMainArea />
-
+          <BranchMainArea />
         </Wrapper>
       </MetaData>
     </>

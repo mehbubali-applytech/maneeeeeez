@@ -1,20 +1,28 @@
 "use client";
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import handImg from "../../../../public/assets/images/shape/hand.png";
 import HeaderAction from "./components/HeaderAction";
 import useGlobalContext from "@/hooks/use-context";
 import sidebarData from "@/data/sidebar-data";
 import Link from "next/link";
 import { SidebarCategory } from "@/interface";
+import { SessionResponseData } from "@/components/pagesUI/owner/ownerTypes";
 
-const DashboardHeader = () => {
+const DashboardHeader = ({ cData }: { cData?: SessionResponseData | null }) => {
   const { sidebarHandle } = useGlobalContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [showResults, setShowResults] = useState(false);
   const [searchResultData, setSearchResultData] = useState<
-    SidebarCategory[] | null
+  SidebarCategory[] | null
   >([]);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+
+  useEffect(()=>{
+    const cName = localStorage.getItem("companyName");
+    const contactP = localStorage.getItem("contactPerson");
+    if(cName) setCompanyName(JSON.parse(cName));
+  })
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.toLowerCase();
@@ -79,7 +87,7 @@ const DashboardHeader = () => {
               </button>
             </div>
             <h2 className="header__title">
-              Hello Mehebub{" "}
+              {companyName || "User"}{" "}
               <span>
                 <Image
                   className="inline-block"
@@ -149,7 +157,7 @@ const DashboardHeader = () => {
                 </div>
               )}
             </div>
-            <HeaderAction />
+            <HeaderAction cData={cData} />
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import avatarImg from "../../../../../public/assets/images/avatar/avatar.png";
 import UserIcon from '@/svg/header-svg/Profile/UserIcon';
 import ChatIcon from '@/svg/header-svg/Profile/ChatIcon';
@@ -13,7 +13,15 @@ type TUserProps={
     isOpenUserDropdown:boolean;
 }
 
-const HeaderUserProfile = ({handleShowUserDrowdown, isOpenUserDropdown}:TUserProps) => {
+const HeaderUserProfile = ({handleShowUserDrowdown, isOpenUserDropdown, cData}:TUserProps & {cData?: any}) => {
+
+      const [contactPerson, setContactPerson] = useState<string | null>(null);
+    
+      useEffect(()=>{
+        const contactP = localStorage.getItem("contactPerson");
+        if(contactP) setContactPerson(JSON.parse(contactP));
+      })
+
     return (
         <>
             <div className="nav-item relative">
@@ -24,7 +32,7 @@ const HeaderUserProfile = ({handleShowUserDrowdown, isOpenUserDropdown}:TUserPro
                             <Image src={avatarImg} alt="img not found" />
                         </div>
                         <div className="user__content">
-                            <h5>Jhon Smith</h5>
+                            <h5>{contactPerson || "Jhon Smith"}</h5>
                             <span>online</span>
                         </div>
                     </div>

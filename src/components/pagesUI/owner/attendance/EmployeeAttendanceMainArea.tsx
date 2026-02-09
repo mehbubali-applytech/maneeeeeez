@@ -27,6 +27,7 @@ import {
   MoreVert,
   Refresh,
   FilterList,
+  EventBusy
 } from "@mui/icons-material";
 import Link from "next/link";
 
@@ -36,6 +37,7 @@ import AttendanceLogs from "./AttendanceLogs";
 import AttendanceRequests from "./AttendanceRequests";
 import EmployeeAttendanceTable from "./EmployeeAttendanceTable";
 import ManualCorrectionModal from "./ManualCorrectionModal";
+import LeaveManagement from "./LeaveManagement";
 import { 
   IAttendanceRecord, 
   IAttendanceCorrectionRequest, 
@@ -44,10 +46,12 @@ import {
 } from "./AttendanceTypes";
 import axios from "axios";
 import { getCorrectedAttendance } from "./attendanceApi";
+import { useRouter } from "next/navigation";
 
 const EmployeeAttendanceMainArea: React.FC = () => {
   // State for tabs
   const [activeTab, setActiveTab] = useState(0);
+  const router = useRouter();
   
   // State for modals
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
@@ -135,19 +139,24 @@ const EmployeeAttendanceMainArea: React.FC = () => {
     try {
       setLoading(prev => ({ ...prev, liveAttendance: true }));
       const payload = {
-        client_id: 27,
         date: new Date().toISOString().split("T")[0],
       };
 
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/owner/attendance/getLiveAttendance`,
-        payload
+        payload,{
+          withCredentials: true
+        }
       );
 
       if (response.data && response.data.data) {
         setTodayAttendance(response.data.data);
       }
     } catch (err: any) {
+     if (err.response?.status === 401) {
+        router.push("/");
+        return;
+      }
       console.error("Failed to fetch live attendance", err);
       setErrors(prev => [...prev, "Failed to fetch live attendance"]);
       showSnackbar("Failed to fetch live attendance", "error");
@@ -217,103 +226,138 @@ const EmployeeAttendanceMainArea: React.FC = () => {
   };
 
   // Tab configuration
-  const tabs = [
-    {
-      label: "Live Monitor",
-      icon: <AccessTime />,
-      component: (
-        <LiveAttendanceMonitor 
-          attendanceData={todayAttendance}
-          onRefresh={handleRefreshCurrentTab}
-          onEditAttendance={(record) => {
-            setSelectedAttendanceRecord(record);
-            setCorrectionModalOpen(true);
-          }}
-          onViewDetails={(record) => {
-            console.log("View details:", record);
-            // Show info message
+ const tabs = [
+  {
+    label: "Live Monitor",
+    icon: <AccessTime />,
+    component: (
+      <LiveAttendanceMonitor 
+        attendanceData={todayAttendance}
+        onRefresh={handleRefreshCurrentTab}
+        onEditAttendance={(record) => {
+          setSelectedAttendanceRecord(record);
+          setCorrectionModalOpen(true);
+        }}
+        onViewDetails={(record) => {
+          console.log("View details:", record);
+          setSnackbar({
+            open: true,
+            message: `Viewing details for ${record.employeeName}`,
+            severity: 'info'
+          });
+        }}
+      />
+    ),
+    loading: loading.liveAttendance
+  },
+  {
+    label: "Monthly View",
+    icon: <CalendarMonth />,
+    component: <EmployeeAttendanceTable />,
+    loading: false
+  },
+  {
+    label: "Attendance Logs",
+    icon: <History />,
+    component: (
+      <AttendanceLogs 
+        onExportCSV={(data) => {
+          console.log("Export CSV:", data.length, "records");
+          showSnackbar(`Exported ${data.length} records to CSV`, "success");
+        }}
+        onExportPDF={(data) => {
+          console.log("Export PDF:", data.length, "records");
+          showSnackbar(`Exported ${data.length} records to PDF`, "success");
+        }}
+        onEditRecord={(record) => {
+          console.log("Edit record:", record);
+          setSelectedAttendanceRecord(record);
+          setCorrectionModalOpen(true);
+        }}
+        onViewCorrection={(record) => {
+          console.log("View correction:", record);
+          if (record.correctionRequest) {
             setSnackbar({
               open: true,
-              message: `Viewing details for ${record.employeeName}`,
+              message: `Viewing correction request for ${record.employeeName}`,
               severity: 'info'
             });
-          }}
-        />
-      ),
-      loading: loading.liveAttendance
-    },
-    {
-      label: "Monthly View",
-      icon: <CalendarMonth />,
-      component: <EmployeeAttendanceTable />,
-      loading: false
-    },
-    {
-      label: "Attendance Logs",
-      icon: <History />,
-      component: (
-        <AttendanceLogs 
-          onExportCSV={(data) => {
-            console.log("Export CSV:", data.length, "records");
-            showSnackbar(`Exported ${data.length} records to CSV`, "success");
-          }}
-          onExportPDF={(data) => {
-            console.log("Export PDF:", data.length, "records");
-            showSnackbar(`Exported ${data.length} records to PDF`, "success");
-          }}
-          onEditRecord={(record) => {
-            console.log("Edit record:", record);
-            setSelectedAttendanceRecord(record);
-            setCorrectionModalOpen(true);
-          }}
-          onViewCorrection={(record) => {
-            console.log("View correction:", record);
-            if (record.correctionRequest) {
-              setSnackbar({
-                open: true,
-                message: `Viewing correction request for ${record.employeeName}`,
-                severity: 'info'
-              });
-            }
-          }}
-        />
-      ),
-      loading: false
-    },
-    {
-      label: "Correction Requests",
-      icon: <Edit />,
-      component: (
-        <AttendanceRequests 
-          onApprove={async (requestId) => {
-            console.log("Approve request:", requestId);
-            // Note: The actual approve/reject logic is handled inside AttendanceRequests component
-            // This callback is just for parent component awareness
-            await fetchCorrectionRequests(); // Refresh after action
-            showSnackbar("Correction request approved", "success");
-          }}
-          onReject={async (requestId) => {
-            console.log("Reject request:", requestId);
-            await fetchCorrectionRequests(); // Refresh after action
-            showSnackbar("Correction request rejected", "success");
-          }}
-          onViewDetails={(request) => {
-            console.log("View request details:", request);
-            setSnackbar({
-              open: true,
-              message: `Viewing correction request details`,
-              severity: 'info'
-            });
-          }}
-          onExport={(data) => {
-            console.log("Export requests:", data.length, "requests");
-            showSnackbar(`Exported ${data.length} correction requests`, "success");
-          }}
-        />
-      ),
-      loading: loading.correctionRequests
-    }
-  ];
+          }
+        }}
+      />
+    ),
+    loading: false
+  },
+  {
+    label: "Correction Requests",
+    icon: <Edit />,
+    component: (
+      <AttendanceRequests 
+        onApprove={async (requestId) => {
+          console.log("Approve request:", requestId);
+          await fetchCorrectionRequests();
+          showSnackbar("Correction request approved", "success");
+        }}
+        onReject={async (requestId) => {
+          console.log("Reject request:", requestId);
+          await fetchCorrectionRequests();
+          showSnackbar("Correction request rejected", "success");
+        }}
+        onViewDetails={(request) => {
+          console.log("View request details:", request);
+          setSnackbar({
+            open: true,
+            message: `Viewing correction request details`,
+            severity: 'info'
+          });
+        }}
+        onExport={(data) => {
+          console.log("Export requests:", data.length, "requests");
+          showSnackbar(`Exported ${data.length} correction requests`, "success");
+        }}
+      />
+    ),
+    loading: loading.correctionRequests
+  },
+  // ADD THIS NEW TAB FOR LEAVE MANAGEMENT
+  {
+    label: "Leave Management",
+    icon: <EventBusy />, // You'll need to import this icon
+    component: (
+      <LeaveManagement
+        onApprove={async (leaveId) => {
+          console.log("Approve leave:", leaveId);
+          showSnackbar("Leave request approved", "success");
+        }}
+        onReject={async (leaveId) => {
+          console.log("Reject leave:", leaveId);
+          showSnackbar("Leave request rejected", "success");
+        }}
+        onCreate={() => {
+          setSnackbar({
+            open: true,
+            message: "Create new leave request functionality",
+            severity: 'info'
+          });
+          // You can open a modal for creating leave request here
+        }}
+        onViewDetails={(leave) => {
+          console.log("View leave details:", leave);
+          setSnackbar({
+            open: true,
+            message: `Viewing leave details for ${leave.employee_name}`,
+            severity: 'info'
+          });
+        }}
+        onExport={(data) => {
+          console.log("Export leaves:", data.length, "leaves");
+          showSnackbar(`Exported ${data.length} leave requests`, "success");
+        }}
+      />
+    ),
+    loading: false
+  }
+];
 
   // Calculate attendance statistics
   const attendanceStats = useMemo(() => {

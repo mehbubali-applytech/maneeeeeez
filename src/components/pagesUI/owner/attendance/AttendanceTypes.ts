@@ -232,3 +232,66 @@ export interface IAbsentCorrectionPayload {
   reason: string;
   source?: string;
 }
+
+
+export interface ILeaveRequest {
+  leave_id: number;
+  employee_id: number;
+  employee_code: string;
+  employee_name: string;
+  designation: string;
+  department: string;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  reason: string;
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
+  approved_by?: number;
+  approved_by_name?: string;
+  approved_on?: string;
+  created_at: string;
+  updated_at: string;
+  duration_days?: number;
+  applied_on?: string;
+  applier?: {
+    user_id: number;
+    username: string;
+    employee_code: string;
+  };
+  approver?: {
+    user_id: number;
+    username: string;
+    employee_code: string;
+  };
+}
+
+export interface ILeaveBalance {
+  employee_id: number;
+  employee_name: string;
+  leave_balances: {
+    leave_type: number;
+    leave_identifier: string;
+    leave_type_name: string;
+    consumed: number;
+    total: number;
+    balance: number;
+  }[];
+}
+
+export interface ILeavePolicy {
+  id: number;
+  leave_identifier: string;
+  leave_type: string;
+  no_of_days: number;
+  description?: string;
+  is_active: boolean;
+}
+
+export interface ILeaveStats {
+  totalRequests: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  cancelled: number;
+  onLeaveToday: number;
+}

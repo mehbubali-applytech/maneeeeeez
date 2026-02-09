@@ -76,12 +76,12 @@ const businessOwnerSidebarData: SidebarCategory[] = [
         icon: "fa-light fa-calendar-check",
         link: "/owner/attendance"
       },
-      {
-        id: 34,
-        label: "Leaves",
-        icon: "fa-light fa-calendar-minus",
-        link: "/owner/leaves"
-      },
+      // {
+      //   id: 34,
+      //   label: "Leaves",
+      //   icon: "fa-light fa-calendar-minus",
+      //   link: "/owner/leaves"
+      // },
       {
         id: 35,
         label: "Holidays",
